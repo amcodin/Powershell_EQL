@@ -1,0 +1,1 @@
+Stop-Service -Name <ServiceName>; Set-Service -Name <ServiceName> -StartupType Disabled
