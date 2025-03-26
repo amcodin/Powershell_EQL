@@ -1,1 +1,1 @@
-Stop-Service -Name <ServiceName>; Set-Service -Name <ServiceName> -StartupType Disabled
+Stop-Service -Name <NVIDIA Display Container LS>; Set-Service -Name <NVIDIA Display Container LS> -StartupType Disabled
