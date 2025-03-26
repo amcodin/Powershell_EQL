@@ -1,4 +1,4 @@
-﻿﻿#requires -Version 3.0
+﻿﻿﻿﻿﻿﻿﻿﻿#requires -Version 3.0
 ##########################################
 #        Client Data Backup Tool         #
 #       Written By Stephen Onions        #
@@ -62,14 +62,10 @@ Function Set-GPupdate { #gpupdate
     param()
     
     Write-Host "Running Group Policy Update..." -ForegroundColor Cyan
-    $process = Start-Process -FilePath "gpupdate" -NoNewWindow -PassThru
-    $process.WaitForExit()
-
-    if ($process.ExitCode -eq 0) {
-        Write-Host "Group Policy update successful" -ForegroundColor Green
-    } else {
-        Write-Warning "Group Policy update failed with code $($process.ExitCode)"
-    }
+    #JV2025 spit out new cmd window for gpupdate
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/k gpupdate /force" -PassThru | Out-Null
+    
+    Write-Host "Group Policy update initiated" -ForegroundColor Green
 }
 
 Function Show-UserPrompt {
@@ -303,13 +299,6 @@ Function Initialize-Form {
 
     # Check admin status
     $script:Admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    
-    # Prompt for GP Update
-    $Script:Action2 = Show-UserPrompt -Message 'Run A GPUPDATE?' -Button2 'Yes' -Button3 'No'
-    if ($Script:Action2 -eq 'Yes') {
-        Write-Host "Running GP Update..." -ForegroundColor Cyan
-        $null = Set-GPupdate
-    }
 
     # Prompt for operation type
     $Script:Action = Show-UserPrompt -Message 'Are we running a Backup or Restore?' -Button2 'Restore' -Button3 'Backup'
@@ -323,8 +312,13 @@ Function Initialize-Form {
         elseif ($Script:Action -eq 'Restore') {
             Write-Host "Starting admin restore..." -ForegroundColor Cyan
             Set-InitialStateRestore
-            Write-Host "Running post-restore GP Update..." -ForegroundColor Cyan
-            $null = Set-GPupdate
+            
+            # Prompt for GP Update after restore
+            $Script:Action2 = Show-UserPrompt -Message 'Run A GPUPDATE?' -Button2 'Yes' -Button3 'No'
+            if ($Script:Action2 -eq 'Yes') {
+                Write-Host "Running GP Update..." -ForegroundColor Cyan
+                $null = Set-GPupdate
+            }
         }
     }
     else {
@@ -335,8 +329,13 @@ Function Initialize-Form {
         elseif ($Script:Action -eq 'Restore') {
             Write-Host "Starting user restore..." -ForegroundColor Cyan
             Set-InitialStateRestore
-            Write-Host "Running post-restore GP Update..." -ForegroundColor Cyan
-            $null = Set-GPupdate
+            
+            # Prompt for GP Update after restore
+            $Script:Action2 = Show-UserPrompt -Message 'Run A GPUPDATE?' -Button2 'Yes' -Button3 'No'
+            if ($Script:Action2 -eq 'Yes') {
+                Write-Host "Running GP Update..." -ForegroundColor Cyan
+                $null = Set-GPupdate
+            }
         }
     }
 }
