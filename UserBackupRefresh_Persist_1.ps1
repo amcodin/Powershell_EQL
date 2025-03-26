@@ -6,9 +6,22 @@ Add-Type -AssemblyName System.Windows.Forms
 
 # Configure script behavior
 $VerbosePreference = 'Continue'
-$script:DefaultSavePath = $env:HOMEDRIVE
+$script:DefaultSavePath = "$env:HOMEDRIVE\LocalData"
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Add required assembly and custom class
+Add-Type -AssemblyName presentationframework
+Add-Type -Language CSharp -TypeDefinition @' 
+public class RemoteInfo {
+    public string Computername;
+    public string ProfileFolder;
+    public string ProfileName;
+    public bool IsInUse;
+    public string SSID;
+    public Microsoft.Win32.RegistryKey UserHive;
+};
+'@
 
 #XAML For main screen.
 [xml]$XAML = 
@@ -109,61 +122,104 @@ $script:BackupPaths = @{
 }
 
 # Helper Functions
-function Show-UserPrompt {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Message,
-        [string]$Title = 'User Prompt',
-        [string[]]$ButtonText = @('OK')
+
+# Show-UserPrompt: Displays a dialog with customizable buttons
+# Usage:
+#   Single OK button: Show-UserPrompt -Message "message"
+#   Two buttons: Show-UserPrompt -Message "message" -Button2 "Yes" -Button3 "No"
+#   Three buttons: Show-UserPrompt -Message "message" -Button1 "Retry" -Button2 "Ignore" -Button3 "Cancel"
+# Note: Button ordering is right-to-left, with Button3 rightmost
+Function Show-UserPrompt {
+    Param(
+        [parameter(Mandatory)][String]$Message,
+        [string]$Button1 = $null,
+        [string]$Button2 = $null,
+        [string]$Button3 = 'OK'
     )
     
-    try {
-        if ($ButtonText.Count -eq 1 -and $ButtonText[0] -eq 'OK') {
-            $null = [System.Windows.MessageBox]::Show($Message, $Title, 'OK')
-            return 'OK'
-        }
-
-        $buttonElements = foreach ($btn in $ButtonText) {
-            "<Button Name='Btn$($btn -replace '\W')' Content='$btn' Margin='5' Padding='10,5' MinWidth='60'/>"
-        }
-
-        [xml]$xaml = @"
-<Window 
-    xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
-    Title='$Title'
-    SizeToContent='WidthAndHeight'
-    WindowStartupLocation='CenterScreen'
-    MaxWidth='500'>
-    <StackPanel Margin='10'>
-        <TextBlock Text='$Message' TextWrapping='Wrap' Margin='0,0,0,20'/>
-        <StackPanel Orientation='Horizontal' HorizontalAlignment='Right'>
-            $buttonElements
+    Add-Type -AssemblyName PresentationFramework
+    [xml]$ErrorForm = @'
+<Window
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    ResizeMode="CanResize"
+    SizeToContent="WidthAndHeight" 
+    MaxWidth="500"
+    Title="User Prompt"
+    WindowStartupLocation="CenterScreen">
+    <Grid Margin="0,0,0,0">
+        <Label Margin="10,10,10,100">
+            <TextBlock TextWrapping="WrapWithOverflow" Text="{Binding Path=Message}"/>
+        </Label>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,5,5" Height="100" Width="Auto" MaxWidth="250">
+            <Button Name="BtnOne" Width="Auto" Height="Auto" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="5,5,5,5" Padding="10" Content="{Binding Path=ButtonOne}"/>
+            <Button Name="BtnTwo" Width="Auto" Height="Auto" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="5,5,5,5" Padding="10" Content="{Binding Path=ButtonTwo}"/>
+            <Button Name="BtnThree" Width="Auto" Height="Auto" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="5,5,5,5" Padding="10" Content="{Binding Path=ButtonThree}"/>
         </StackPanel>
-    </StackPanel>
+    </Grid>
 </Window>
-"@
+'@
 
-        $reader = New-Object System.Xml.XmlNodeReader $xaml
-        $window = [Windows.Markup.XamlReader]::Load($reader)
-        $script:result = $null
-
-        foreach ($btn in $ButtonText) {
-            $button = $window.FindName("Btn$($btn -replace '\W')")
-            if ($button) {
-                $button.Add_Click({
-                    $script:result = $this.Content
-                    $window.Close()
-                })
-            }
-        }
-
-        $null = $window.ShowDialog()
-        return $script:result
+    try {
+        $reader = New-Object System.Xml.XmlNodeReader $ErrorForm
+        $ErrorWindow = [Windows.Markup.XamlReader]::Load($reader)
     }
     catch {
-        Write-Warning ("Failed to show prompt: {0}" -f $_.Exception.Message)
-        return $null
+        # Fallback to standard MessageBox if XAML window fails
+        $null = [System.Windows.MessageBox]::Show($Message, 'User Prompt', 'OK')
+        Write-Warning "Failed to create custom dialog: $($_.Exception.Message)"
+        return 'OK'
+    }
+
+    $ErrorDetails = [PsCustomObject]@{ 
+        Message     = $Message
+        ButtonOne   = $Button1
+        ButtonTwo   = $Button2
+        ButtonThree = $Button3
+    }
+
+    $btnOne = $ErrorWindow.Findname('BtnOne')
+    $btnTwo = $ErrorWindow.Findname('BtnTwo')
+    $btnThree = $ErrorWindow.Findname('BtnThree')
+
+    if([string]::IsNullOrEmpty($Button1)) {
+        $btnOne.Visibility = 'Hidden'
+    } else {
+        $btnOne.Visibility = 'Visible'
+    }
+    if([string]::IsNullOrEmpty($Button2)) {
+        $btnTwo.Visibility = 'Hidden'
+    } else {
+        $btnTwo.Visibility = 'Visible'
+    }
+    if([string]::IsNullOrEmpty($Button3)) {
+        $btnThree.Visibility = 'Hidden'
+    } else {
+        $btnThree.Visibility = 'Visible'
+    }
+
+    $ErrorWindow.DataContext = $ErrorDetails
+
+    [string]$Return = ''
+    $btnOne.Add_Click({
+        $ErrorWindow.Close()
+        Set-Variable -Name 'Return' -Value $btnOne.Content -Scope 1
+    })
+    $btnTwo.Add_Click({
+        $ErrorWindow.Close()
+        Set-Variable -Name 'Return' -Value $btnTwo.Content -Scope 1
+    })
+    $btnThree.Add_Click({
+        $ErrorWindow.Close()
+        Set-Variable -Name 'Return' -Value $btnThree.Content -Scope 1
+    })
+
+    if([string]::IsNullOrEmpty($Button1) -and [string]::IsNullOrEmpty($Button2) -and $Button3 -eq 'OK') {
+        $null = [System.Windows.MessageBox]::Show($Message, 'User Prompt', 'OK')
+        return 'OK'
+    } else {
+        $null = $ErrorWindow.ShowDialog()
+        return $Return
     }
 }
 
@@ -380,12 +436,12 @@ function Start-BackupRestore {
         }
 
         Write-Verbose ("{0} operation completed" -f $Operation)
-        Show-UserPrompt -Message ("{0} completed successfully" -f $Operation) -Title 'Operation Complete'
+        Show-UserPrompt -Message ("{0} completed successfully" -f $Operation)
         return $true
     }
     catch {
         Write-Warning ("{0} operation failed: {1}" -f $Operation, $_.Exception.Message)
-        Show-UserPrompt -Message "$Operation failed: $($_.Exception.Message)" -Title 'Operation Failed'
+        Show-UserPrompt -Message "$Operation failed: $($_.Exception.Message)"
         return $false
     }
 }
@@ -393,10 +449,21 @@ function Start-BackupRestore {
 # Helper function for space calculations
 function Update-SpaceLabels {
     if ($script:controls.TxtSaveLoc.Text) {
-        $drive = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='$($script:controls.TxtSaveLoc.Text[0])':'"
-        if ($drive) {
-            $freeSpace = [math]::Round($drive.FreeSpace / 1GB, 2)
-            $script:controls.lblFreeSpace.Content = "Free Space: $freeSpace GB"
+        try {
+            $driveLetter = $script:controls.TxtSaveLoc.Text[0]
+            $filter = "DeviceID='$driveLetter`:'"
+            $drive = Get-WmiObject -Class Win32_LogicalDisk -Filter $filter -ErrorAction Stop
+            if ($drive) {
+                $freeSpace = [math]::Round($drive.FreeSpace / 1GB, 2)
+                $script:controls.lblFreeSpace.Content = "Free Space: $freeSpace GB"
+            }
+            else {
+                $script:controls.lblFreeSpace.Content = "Free Space: Unable to determine"
+            }
+        }
+        catch {
+            Write-Warning ("Failed to get drive space: {0}" -f $_.Exception.Message)
+            $script:controls.lblFreeSpace.Content = "Free Space: Error"
         }
     }
     
@@ -409,8 +476,21 @@ function Update-SpaceLabels {
     $script:controls.lblRequiredSpace.Content = "Required Space: $([math]::Round($totalSize / 1024, 2)) GB"
 }
 
-# Initialize GUI
-function Initialize-GUI {
+# Initialize Form
+function Initialize-Form {
+    # Check admin status first
+    [bool]$script:Admin = ([Security.Principal.WindowsPrincipal]([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+    # Get initial user choices
+    [string]$Script:Action2 = Show-UserPrompt -Message 'Run A GPUPDATE?' -Button1 '' -Button2 'Yes' -Button3 'No'
+    if ($Script:Action2 -eq 'Yes') {
+        Write-Host "Running GPUpdate..." -ForegroundColor Cyan
+        Set-GPupdate
+    }
+
+    [string]$Script:Action = Show-UserPrompt -Message 'Are we running a Backup or Restore?' -Button1 '' -Button2 'Restore' -Button3 'Backup'
+
+    # Initialize GUI
     $reader = New-Object System.Xml.XmlNodeReader $XAML
     $window = [Windows.Markup.XamlReader]::Load($reader)
     
@@ -420,62 +500,149 @@ function Initialize-GUI {
         $script:controls[$_.Name] = $window.FindName($_.Name)
     }
 
+    # Setup initial state based on operation
+    if ($Script:Action -eq 'Backup') {
+        # Scan for default paths
+        foreach ($category in $script:BackupPaths.Keys) {
+            foreach ($item in $script:BackupPaths[$category]) {
+                if (Test-Path $item.Path) {
+                    $size = 0
+                    Get-ChildItem $item.Path -Recurse -File -ErrorAction SilentlyContinue | 
+                        ForEach-Object { $size += $_.Length }
+                    
+                    $listItem = [PSCustomObject]@{
+                        Name = Split-Path -Leaf $item.Path
+                        FullPath = $item.Path
+                        Type = if (Test-Path -Path $item.Path -PathType Container) {'Folder'} else {'File'}
+                        Size = [math]::Round($size / 1MB, 2)
+                        Selected = $true
+                    }
+                    $script:controls.lvwFileList.Items.Add($listItem)
+                }
+            }
+        }
+
+        # Set default save location
+        if (-not (Test-Path $script:DefaultSavePath)) {
+            New-Item -Path $script:DefaultSavePath -ItemType Directory -Force
+        }
+        $script:controls.TxtSaveLoc.Text = $script:DefaultSavePath
+    }
+    else {
+        # Handle restore operation
+        $script:controls.btnAddLoc.IsEnabled = $false
+        $script:controls.btnSavBrowse.Content = "Select Backup"
+    }
+
     # Setup event handlers
     $script:controls.btnSavBrowse.Add_Click({
-        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-        $dialog.Description = "Select backup location"
-        $dialog.SelectedPath = $env:USERPROFILE
-        
-        if ($dialog.ShowDialog() -eq 'OK') {
-            $script:controls.TxtSaveLoc.Text = $dialog.SelectedPath
-            Update-SpaceLabels
+        $dialog = $null
+        try {
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dialog.Description = if ($Script:Action -eq 'Backup') {"Select backup location"} else {"Select backup to restore"}
+            $dialog.SelectedPath = $env:USERPROFILE
+            
+            if ($dialog.ShowDialog() -eq 'OK') {
+                $script:controls.TxtSaveLoc.Text = $dialog.SelectedPath
+                Update-SpaceLabels
+
+                if ($Script:Action -eq 'Restore') {
+                    # Load backup contents for restore
+                    $script:controls.lvwFileList.Items.Clear()
+                    Get-ChildItem -Path $dialog.SelectedPath -Exclude 'FileList*.csv','Drives.csv','Printers.txt' | ForEach-Object {
+                        $size = if ($_.PSIsContainer) {
+                            (Get-ChildItem $_.FullName -Recurse -File | Measure-Object -Property Length -Sum).Sum
+                        } else {
+                            $_.Length
+                        }
+                        
+                        $script:controls.lvwFileList.Items.Add([PSCustomObject]@{
+                            Name = $_.Name
+                            FullPath = $_.FullName
+                            Type = if ($_.PSIsContainer) {'Folder'} else {'File'}
+                            Size = [math]::Round($size / 1MB, 2)
+                            Selected = $true
+                        })
+                    }
+                }
+            }
+        }
+        catch {
+            Write-Warning ("Failed to show folder browser: {0}" -f $_.Exception.Message)
+        }
+        finally {
+            if ($dialog) {
+                $dialog.Dispose()
+            }
         }
     })
 
     $script:controls.btnAddLoc.Add_Click({
-        $addType = Show-UserPrompt -Message "Select what to add" -Title "Add Item" -ButtonText @('File', 'Folder')
+        $addType = Show-UserPrompt -Message "Select what to add" -Button1 '' -Button2 'File' -Button3 'Folder'
         
         if ($addType -eq 'Folder') {
-            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-            $dialog.Description = "Select folder to backup"
-            $dialog.SelectedPath = $env:USERPROFILE
-            
-            if ($dialog.ShowDialog() -eq 'OK') {
-                $folderInfo = Get-Item $dialog.SelectedPath
-                $size = 0
-                Get-ChildItem $dialog.SelectedPath -Recurse -File -ErrorAction SilentlyContinue | 
-                    ForEach-Object { $size += $_.Length }
+            $dialog = $null
+            try {
+                $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+                $dialog.Description = "Select folder to backup"
+                $dialog.SelectedPath = $env:USERPROFILE
                 
-                $item = [PSCustomObject]@{
-                    Name = $folderInfo.Name
-                    FullPath = $folderInfo.FullName
-                    Type = 'Folder'
-                    Size = [math]::Round($size / 1MB, 2)
-                    Selected = $true
-                }
-                $script:controls.lvwFileList.Items.Add($item)
-                Update-SpaceLabels
-            }
-        }
-        else {
-            $dialog = New-Object System.Windows.Forms.OpenFileDialog
-            $dialog.Title = "Select file to backup"
-            $dialog.InitialDirectory = $env:USERPROFILE
-            $dialog.Multiselect = $true
-            
-            if ($dialog.ShowDialog() -eq 'OK') {
-                foreach ($file in $dialog.FileNames) {
-                    $fileInfo = Get-Item $file
+                if ($dialog.ShowDialog() -eq 'OK') {
+                    $folderInfo = Get-Item $dialog.SelectedPath
+                    $size = 0
+                    Get-ChildItem $dialog.SelectedPath -Recurse -File -ErrorAction SilentlyContinue | 
+                        ForEach-Object { $size += $_.Length }
+                    
                     $item = [PSCustomObject]@{
-                        Name = $fileInfo.Name
-                        FullPath = $fileInfo.FullName
-                        Type = 'File'
-                        Size = [math]::Round($fileInfo.Length / 1MB, 2)
+                        Name = $folderInfo.Name
+                        FullPath = $folderInfo.FullName
+                        Type = 'Folder'
+                        Size = [math]::Round($size / 1MB, 2)
                         Selected = $true
                     }
                     $script:controls.lvwFileList.Items.Add($item)
+                    Update-SpaceLabels
                 }
-                Update-SpaceLabels
+            }
+            catch {
+                Write-Warning ("Failed to add folder: {0}" -f $_.Exception.Message)
+            }
+            finally {
+                if ($dialog) {
+                    $dialog.Dispose()
+                }
+            }
+        }
+        else {
+            $dialog = $null
+            try {
+                $dialog = New-Object System.Windows.Forms.OpenFileDialog
+                $dialog.Title = "Select file to backup"
+                $dialog.InitialDirectory = $env:USERPROFILE
+                $dialog.Multiselect = $true
+                
+                if ($dialog.ShowDialog() -eq 'OK') {
+                    foreach ($file in $dialog.FileNames) {
+                        $fileInfo = Get-Item $file
+                        $item = [PSCustomObject]@{
+                            Name = $fileInfo.Name
+                            FullPath = $fileInfo.FullName
+                            Type = 'File'
+                            Size = [math]::Round($fileInfo.Length / 1MB, 2)
+                            Selected = $true
+                        }
+                        $script:controls.lvwFileList.Items.Add($item)
+                    }
+                    Update-SpaceLabels
+                }
+            }
+            catch {
+                Write-Warning ("Failed to add file(s): {0}" -f $_.Exception.Message)
+            }
+            finally {
+                if ($dialog) {
+                    $dialog.Dispose()
+                }
             }
         }
     })
@@ -487,23 +654,25 @@ function Initialize-GUI {
         $script:controls.chk_Printers.IsChecked = $true
         $script:controls.lblFreeSpace.Content = ""
         $script:controls.lblRequiredSpace.Content = ""
+        
+        if ($Script:Action -eq 'Backup') {
+            Initialize-Form
+        }
     })
 
     $script:controls.btnStart.Add_Click({
         if (-not $script:controls.TxtSaveLoc.Text) {
-            Show-UserPrompt -Message "Please select a backup location" -Title "Required Field"
+            Show-UserPrompt -Message "Please select a backup location"
             return
         }
 
-        $operation = Show-UserPrompt -Message 'Select operation' -Title 'Backup/Restore' -ButtonText @('Backup', 'Restore')
-        if ($operation) {
-            $result = Start-BackupRestore -Path $script:controls.TxtSaveLoc.Text -Operation $operation
-            
-            if ($result -and $operation -eq 'Restore') {
-                $runGpUpdate = Show-UserPrompt -Message 'Run GPUpdate now?' -Title 'GPUpdate' -ButtonText @('Yes', 'No')
-                if ($runGpUpdate -eq 'Yes') {
-                    Set-GPupdate
-                }
+        # Start backup/restore operation
+        $result = Start-BackupRestore -Path $script:controls.TxtSaveLoc.Text -Operation $Script:Action
+        
+        if ($result -and $Script:Action -eq 'Restore') {
+            $runGpUpdate = Show-UserPrompt -Message 'Run GPUpdate now?' -Button2 'Yes' -Button3 'No'
+            if ($runGpUpdate -eq 'Yes') {
+                Set-GPupdate
             }
         }
     })
@@ -513,15 +682,18 @@ function Initialize-GUI {
         Update-SpaceLabels
     })
 
+    # Initialize space labels
+    Update-SpaceLabels
+
     return $window
 }
 
 # Main script execution
 try {
-    $mainWindow = Initialize-GUI
+    $mainWindow = Initialize-Form
     $mainWindow.ShowDialog()
 }
 catch {
     Write-Warning ("Script execution failed: {0}" -f $_.Exception.Message)
-    Show-UserPrompt -Message "Script execution failed: $($_.Exception.Message)" -Title 'Error'
+    Show-UserPrompt -Message "Script execution failed: $($_.Exception.Message)"
 }
