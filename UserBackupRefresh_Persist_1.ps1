@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿#requires -Version 3.0
+﻿﻿#requires -Version 3.0
 ##########################################
 #        Client Data Backup Tool         #
 #       Written By Stephen Onions        #
@@ -44,6 +44,130 @@ $script:BackupPaths = @{
         @{Path = "$env:LOCALAPPDATA\Packages\Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe\LocalState\plum.sqlite"; Description = "Windows 10/11 Sticky Notes"} #stickynotes
         @{Path = "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt"; Description = "Legacy Sticky Notes"} #stickynotes
     )
+}
+
+# Network and printer backup functions
+Function Backup-NetworkDrives {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$SaveLocation
+    )
+    
+    try {
+        Write-Verbose "Backing up network drives..."
+        $drives = Get-WmiObject -Class 'Win32_MappedLogicalDisk' | 
+                  Select-Object -Property Name, ProviderName
+                  
+        if ($drives) {
+            $drives | Export-Csv -Path "$SaveLocation\Drives.csv" -NoTypeInformation
+            Write-Verbose "Network drives backed up successfully"
+            return $true
+        } else {
+            Write-Verbose "No network drives found to backup"
+            return $false
+        }
+    }
+    catch {
+        Write-Warning "Failed to backup network drives: $_"
+        return $false
+    }
+}
+
+Function Backup-PrinterMappings {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$SaveLocation
+    )
+    
+    try {
+        Write-Verbose "Backing up printer mappings..."
+        $printers = Get-WmiObject -Query "Select * FROM Win32_Printer WHERE Local=$false" | 
+                    Select-Object -ExpandProperty Name
+                    
+        if ($printers) {
+            $printers | Set-Content -Path "$SaveLocation\Printers.txt"
+            Write-Verbose "Printer mappings backed up successfully"
+            return $true
+        } else {
+            Write-Verbose "No printer mappings found to backup"
+            return $false
+        }
+    }
+    catch {
+        Write-Warning "Failed to backup printer mappings: $_"
+        return $false
+    }
+}
+
+Function Restore-NetworkDrives {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$BackupLocation
+    )
+    
+    try {
+        $drivesFile = "$BackupLocation\Drives.csv"
+        if (Test-Path $drivesFile) {
+            Write-Verbose "Restoring network drives..."
+            $drives = Import-Csv -Path $drivesFile
+            
+            foreach ($drive in $drives) {
+                $letter = $drive.Name.Substring(0, 1)
+                $path = $drive.ProviderName
+                Write-Verbose "Mapping drive $letter to $path"
+                
+                # Use New-PSDrive with Persist parameter and Global scope
+                New-PSDrive -Persist -Name $letter -PSProvider FileSystem -Root $path -Scope Global -ErrorAction Continue
+            }
+            Write-Verbose "Network drives restored successfully"
+            return $true
+        } else {
+            Write-Verbose "No network drives backup file found"
+            return $false
+        }
+    }
+    catch {
+        Write-Warning "Failed to restore network drives: $_"
+        return $false
+    }
+}
+
+Function Restore-PrinterMappings {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$BackupLocation
+    )
+    
+    try {
+        $printersFile = "$BackupLocation\Printers.txt"
+        if (Test-Path $printersFile) {
+            Write-Verbose "Restoring printer mappings..."
+            $printers = Get-Content -Path $printersFile
+            
+            if ($printers) {
+                $wsNet = New-Object -ComObject WScript.Network
+                foreach ($printer in $printers) {
+                    Write-Verbose "Mapping printer: $printer"
+                    $wsNet.AddWindowsPrinterConnection($printer)
+                }
+                Write-Verbose "Printer mappings restored successfully"
+            } else {
+                Write-Verbose "No printer mappings found in backup"
+            }
+            return $true
+        } else {
+            Write-Verbose "No printer mappings backup file found"
+            return $false
+        }
+    }
+    catch {
+        Write-Warning "Failed to restore printer mappings: $_"
+        return $false
+    }
 }
 
 # Remote info class definition
@@ -355,22 +479,68 @@ Function Start-BRProcess {
     try {
         $selectedPaths = $script:FilePaths | Where-Object { $_.Selected }
         $total = $selectedPaths.Count
+        
+        # Add steps for network drives and printers if checked
+        if ($chk_networkDrives.IsChecked) { $total++ }
+        if ($chk_Printers.IsChecked) { $total++ }
+        
         $current = 0
 
-        foreach ($path in $selectedPaths) {
-            $current++
-            $percent = ($current / $total) * 100
-            
-            $activity = if ($Script:Action -eq 'Backup') { "Backing up files" } else { "Restoring files" } #progress
-            Write-Progress -Activity $activity -Status "Processing $($path.Name)" -PercentComplete $percent #progress
-            
-            $destination = if ($Script:Action -eq 'Backup') { 
-                $TxtSaveLoc.Text 
-            } else { 
-                $env:USERPROFILE 
+        if ($Script:Action -eq 'Backup') {
+            # Process file/folder backups
+            foreach ($path in $selectedPaths) {
+                $current++
+                $percent = ($current / $total) * 100
+                
+                Write-Progress -Activity "Backing up files" -Status "Processing $($path.Name)" -PercentComplete $percent
+                
+                $destination = $TxtSaveLoc.Text
+                Copy-Item -Path $path.FullPath -Destination $destination -Recurse -Force
             }
             
-            Copy-Item -Path $path.FullPath -Destination $destination -Recurse -Force
+            # Process network drives backup
+            if ($chk_networkDrives.IsChecked) {
+                $current++
+                $percent = ($current / $total) * 100
+                Write-Progress -Activity "Backing up files" -Status "Processing network drives" -PercentComplete $percent
+                Backup-NetworkDrives -SaveLocation $TxtSaveLoc.Text
+            }
+            
+            # Process printer mappings backup
+            if ($chk_Printers.IsChecked) {
+                $current++
+                $percent = ($current / $total) * 100
+                Write-Progress -Activity "Backing up files" -Status "Processing printer mappings" -PercentComplete $percent
+                Backup-PrinterMappings -SaveLocation $TxtSaveLoc.Text
+            }
+        }
+        else { # Restore
+            # Process file/folder restores
+            foreach ($path in $selectedPaths) {
+                $current++
+                $percent = ($current / $total) * 100
+                
+                Write-Progress -Activity "Restoring files" -Status "Processing $($path.Name)" -PercentComplete $percent
+                
+                $destination = $env:USERPROFILE
+                Copy-Item -Path $path.FullPath -Destination $destination -Recurse -Force
+            }
+            
+            # Process network drives restore
+            if ($chk_networkDrives.IsChecked) {
+                $current++
+                $percent = ($current / $total) * 100
+                Write-Progress -Activity "Restoring files" -Status "Processing network drives" -PercentComplete $percent
+                Restore-NetworkDrives -BackupLocation $TxtSaveLoc.Text
+            }
+            
+            # Process printer mappings restore
+            if ($chk_Printers.IsChecked) {
+                $current++
+                $percent = ($current / $total) * 100
+                Write-Progress -Activity "Restoring files" -Status "Processing printer mappings" -PercentComplete $percent
+                Restore-PrinterMappings -BackupLocation $TxtSaveLoc.Text
+            }
         }
 
         Write-Progress -Activity "Processing complete" -Completed
@@ -475,4 +645,3 @@ $Form.Add_ContentRendered({ Initialize-Form })
 # Show the form
 $Form.ShowDialog()
 
-#endregion Main Form Logic
