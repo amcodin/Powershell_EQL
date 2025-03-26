@@ -2,187 +2,188 @@
 
 ## Current Development Focus
 
-### 1. Backup Process Enhancement
+### 1. Initial Flow Enhancement
 ```mermaid
 graph TD
-    A[Backup Process] --> B[Default Paths]
-    A --> C[Browser Data]
-    A --> D[Network Configuration]
+    A[Initial Flow] --> B[GPUpdate Prompt]
+    A --> C[Operation Selection]
+    A --> D[Path Setup]
     
-    B --> E[C:\local implementation]
-    B --> F[C:\local\backupfolder]
+    B --> E[Run GPUpdate]
+    B --> F[Status Check]
     
-    C --> G[Edge favorites]
-    C --> H[Chrome to Edge import]
+    C --> G[Backup Flow]
+    C --> H[Restore Flow]
     
-    D --> I[Network drives]
-    D --> J[Printer mappings]
+    D --> I[Required Paths]
+    D --> J[Optional Paths]
 ```
 
 ### 2. Active Implementation Tasks
-- **Default Path Implementation**
-  - Add C:\local for backup operations
-  - Implement C:\local\backupfolder for restore
-  - Validate path existence and permissions
+- **Initial Flow Implementation**
+  - Add GPUpdate prompt at start
+  - Implement Backup/Restore selection
+  - Set up required and optional paths
+  - Add CSV file management
 
-- **Browser Integration**
-  - Edge favorites export mechanism
-  - Chrome favorites backup
-  - Chrome to Edge import process
-  - Browser profile handling
+- **Path Management**
+  - Required paths configuration
+  - Optional paths setup
+  - Path existence validation
+  - Permission checks
 
-- **System Configuration**
-  - Network drive capture improvements
-  - Printer mapping enhancements
-  - Quick access links backup
-  - Sticky notes data handling
+- **Data Tracking**
+  - FileList CSV creation
+  - Original location tracking
+  - Path mapping for restore
+  - Data validation and verification
 
 ### 3. Core Function Updates
 ```mermaid
 graph LR
-    A[Set-InitialStateAdminBackup] --> B[Profile Selection]
-    B --> C[Path Validation]
-    C --> D[Backup Execution]
+    A[Initialize-Form] --> B[Initial Prompts]
+    B --> C[Path Setup]
+    C --> D[Flow Selection]
 ```
 
 ## Recent Changes
 
 ### 1. Code Implementation
-- Added GPUpdate functionality
-- Implemented configuration manager actions
-- Enhanced user certificate handling
-- Added NVIDIA service management
+- Identified need for GPUpdate prompt
+- Found missing path auto-detection
+- Discovered CSV tracking requirements
+- Located flow control improvements
 
 ### 2. Architecture Updates
-- Separated backup/restore logic
-- Enhanced progress tracking
-- Improved error handling
+- Planned flow reorganization
+- Enhanced path management
+- Improved CSV handling
 - Added validation checks
 
 ### 3. Documentation
-- Updated function documentation
-- Added error code references
-- Enhanced user guidance
-- Improved setup instructions
+- Updated progress tracking
+- Enhanced implementation status
+- Added new requirements
+- Documented flow changes
 
 ## Next Steps
 
 ### 1. Immediate Tasks
 ```mermaid
 graph TD
-    A[Current Sprint] --> B[Default Paths]
-    A --> C[Browser Integration]
-    A --> D[Network Config]
+    A[Current Sprint] --> B[Flow Control]
+    A --> C[Path Management]
+    A --> D[Data Tracking]
     
-    B --> E[Implementation]
-    B --> F[Testing]
+    B --> E[GPUpdate]
+    B --> F[Operation Selection]
     
-    C --> G[Export Logic]
-    C --> H[Import Process]
+    C --> G[Auto-detection]
+    C --> H[Validation]
     
-    D --> I[Drive Mapping]
-    D --> J[Printer Config]
+    D --> I[CSV Creation]
+    D --> J[Location Mapping]
 ```
 
 ### 2. Planned Features
-- OneNote mapped books backup
-- Enhanced PST file handling
-- Improved signature timestamp comparison
-- Additional validation checks
+- Enhanced flow control
+- Automatic path detection
+- CSV file management
+- Improved restore mapping
 
 ### 3. Technical Debt
-- Refactor file copy operations
-- Enhance error recovery
-- Optimize large file handling
-- Improve progress reporting
+- Refactor initialization logic
+- Enhance path validation
+- Optimize CSV handling
+- Improve flow control
 
 ## Active Decisions
 
 ### 1. Implementation Choices
-- Using filesystem COM objects for size calculations
-- Implementing robust error handling
-- Adding detailed progress tracking
-- Enhancing user feedback
+- Move GPUpdate prompt to start
+- Add operation selection dialog
+- Implement automatic path scanning
+- Add CSV file management
 
 ### 2. Technical Approaches
 ```mermaid
 graph TD
-    A[Design Decisions] --> B[Error Handling]
-    A --> C[Progress Tracking]
-    A --> D[File Operations]
+    A[Implementation] --> B[Flow Control]
+    A --> C[Path Management]
+    A --> D[Data Tracking]
     
-    B --> E[Try-Catch Blocks]
+    B --> E[Initialization]
     B --> F[User Prompts]
     
-    C --> G[Progress Bars]
-    C --> H[Status Updates]
+    C --> G[Auto-detection]
+    C --> H[Validation]
     
-    D --> I[Batch Processing]
-    D --> J[Size Validation]
+    D --> I[CSV Handling]
+    D --> J[Location Mapping]
 ```
 
 ### 3. Open Questions
-- Optimal PST file handling strategy
-- Browser profile management approach
-- Network timeout handling
-- Cross-version compatibility
+- Path detection reliability
+- CSV file format
+- Flow control structure
+- Error handling approach
 
 ## Development Guidelines
 
 ### 1. Code Standards
-- Clear function documentation
-- Consistent error handling
-- Progress reporting
-- User feedback
+- Clear flow control
+- Consistent path handling
+- CSV file management
+- User interaction
 
 ### 2. Testing Requirements
-- Path validation
-- Permission checks
-- Network operations
+- Flow validation
+- Path detection
+- CSV handling
 - Error scenarios
 
 ### 3. Documentation Updates
-- Function descriptions
-- Parameter details
-- Error codes
+- Flow description
+- Path configuration
+- CSV format
 - User instructions
 
 ## Current Challenges
 
 ### 1. Technical Issues
-- Large file handling
-- Network timeouts
-- Permission management
-- Cross-machine compatibility
+- Path detection accuracy
+- CSV file management
+- Flow control reliability
+- Cross-version compatibility
 
 ### 2. Implementation Concerns
-- Browser data consistency
-- Configuration persistence
+- Initial flow clarity
+- Path validation
+- Data persistence
 - Error recovery
-- Progress accuracy
 
 ### 3. Future Considerations
-- Scalability improvements
-- Performance optimization
-- Enhanced error handling
-- Additional backup items
+- Enhanced path detection
+- Improved CSV handling
+- Better flow control
+- Additional validation
 
 ## Project Status
 
 ### 1. Completed Items
-- Basic backup/restore functionality
-- GUI implementation
+- Basic GUI implementation
+- Initial backup/restore
 - Progress tracking
 - Error handling
 
 ### 2. In Progress
-- Default path implementation
-- Browser data handling
-- Network configuration
-- System settings
+- Flow enhancement
+- Path management
+- CSV handling
+- Data tracking
 
 ### 3. Upcoming Work
-- OneNote integration
-- PST file management
-- Additional validations
-- Enhanced recovery
+- Enhanced path detection
+- Improved CSV management
+- Better flow control
+- Additional validation

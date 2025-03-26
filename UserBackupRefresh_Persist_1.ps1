@@ -10,6 +10,60 @@ $script:DefaultSavePath = $env:HOMEDRIVE
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+#XAML For main screen.
+[xml]$XAML = 
+@'
+<Window
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    ResizeMode="CanResize"
+    Width="800"
+    Height="600"
+    Title="Data Backup Tool"
+    WindowStartupLocation="CenterScreen">
+    <Grid Margin="0,0,0,0">
+        <Label Width="Auto" Height="30" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top" Content="Backup Location (New or Existing):"/>
+        <TextBox Name="TxtSaveLoc" Width="400" Height="30" HorizontalAlignment="Left" Margin="10,40,0,0" VerticalAlignment="Top" IsReadOnly="True"/>
+        <Button Name="btnSavBrowse" Width="60" Height="30" HorizontalAlignment="Left" Margin="420,40,0,0" VerticalAlignment="Top" Content="Browse"/>
+        <Label Name="lblFreeSpace" Width="Auto" Height="30" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="490,10,0,0"/>
+        <Label Name="lblRequiredSpace" Width="Auto" Height="30" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="490,40,0,0"/>
+        <Label Width="200" Height="30" HorizontalAlignment="Left" Margin="10,80,0,0" VerticalAlignment="Top" Content="Files/Locations Selected for Backup:"/>
+        <ListView Name="lvwFileList" Height="Auto" Width="Auto" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="10,110,200,50">
+          <ListView.Resources>
+            <Style TargetType="{x:Type ListViewItem}">
+              <Setter Property="IsSelected" Value="{Binding Selected, Mode=TwoWay}"/>
+            </Style>
+          </ListView.Resources>
+          <ListView.View>
+            <GridView>
+              <GridView.Columns>
+                <GridViewColumn>
+                  <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                      <CheckBox Tag="{Binding Name}" IsChecked="{Binding RelativeSource={RelativeSource AncestorType={x:Type ListViewItem}}, Path=IsSelected}"/>
+                    </DataTemplate>
+                  </GridViewColumn.CellTemplate>
+                </GridViewColumn>
+                <GridViewColumn DisplayMemberBinding="{Binding Name}" Header="Name"/>
+                <GridViewColumn DisplayMemberBinding="{Binding FullPath}" Header="FullPath"/>
+                <GridViewColumn DisplayMemberBinding="{Binding Type}" Header="Type"/>
+                <GridViewColumn DisplayMemberBinding="{Binding Size}" Header="Size mb"/>
+              </GridView.Columns>
+            </GridView>
+          </ListView.View>
+        </ListView>
+        <Button Name="btnAddLoc" Width="80" Height="30" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,110,100,0" Content="Add File"/>
+        <StackPanel Margin="0,180,10,0" HorizontalAlignment="Right">
+            <Label Content="Non File Based Options"/>
+            <CheckBox Name="chk_networkDrives" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,2,0,0" IsChecked="True">Network Drive Mappings</CheckBox>
+            <CheckBox Name="chk_Printers" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,2,0,0" IsChecked="True">Printer Mappings</CheckBox>
+        </StackPanel>
+        <Button Name="btnStart" Width="70" Height="30" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10,420,0,10" Content="Start"/>
+        <Button Name="btnReset" Width="70" Height="30" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="85,420,0,10" Content="Reset Form"/>
+    </Grid>
+</Window>
+'@
+
 # Define backup paths
 $script:BackupPaths = @{
     Required = @(
@@ -336,17 +390,114 @@ function Start-BackupRestore {
     }
 }
 
-# Main script execution
-try {
-    $operation = Show-UserPrompt -Message 'Select operation' -Title 'Backup/Restore' -ButtonText @('Backup', 'Restore')
+# Helper function for space calculations
+function Update-SpaceLabels {
+    if ($script:controls.TxtSaveLoc.Text) {
+        $drive = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='$($script:controls.TxtSaveLoc.Text[0])':'"
+        if ($drive) {
+            $freeSpace = [math]::Round($drive.FreeSpace / 1GB, 2)
+            $script:controls.lblFreeSpace.Content = "Free Space: $freeSpace GB"
+        }
+    }
     
-    if ($operation) {
+    $totalSize = 0
+    foreach ($item in $script:controls.lvwFileList.Items) {
+        if ($item.Selected) {
+            $totalSize += $item.Size
+        }
+    }
+    $script:controls.lblRequiredSpace.Content = "Required Space: $([math]::Round($totalSize / 1024, 2)) GB"
+}
+
+# Initialize GUI
+function Initialize-GUI {
+    $reader = New-Object System.Xml.XmlNodeReader $XAML
+    $window = [Windows.Markup.XamlReader]::Load($reader)
+    
+    # Get controls
+    $script:controls = @{}
+    $XAML.SelectNodes("//*[@Name]") | ForEach-Object {
+        $script:controls[$_.Name] = $window.FindName($_.Name)
+    }
+
+    # Setup event handlers
+    $script:controls.btnSavBrowse.Add_Click({
         $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-        $dialog.Description = ("Select folder for {0}" -f $operation)
+        $dialog.Description = "Select backup location"
         $dialog.SelectedPath = $env:USERPROFILE
         
         if ($dialog.ShowDialog() -eq 'OK') {
-            $result = Start-BackupRestore -Path $dialog.SelectedPath -Operation $operation
+            $script:controls.TxtSaveLoc.Text = $dialog.SelectedPath
+            Update-SpaceLabels
+        }
+    })
+
+    $script:controls.btnAddLoc.Add_Click({
+        $addType = Show-UserPrompt -Message "Select what to add" -Title "Add Item" -ButtonText @('File', 'Folder')
+        
+        if ($addType -eq 'Folder') {
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dialog.Description = "Select folder to backup"
+            $dialog.SelectedPath = $env:USERPROFILE
+            
+            if ($dialog.ShowDialog() -eq 'OK') {
+                $folderInfo = Get-Item $dialog.SelectedPath
+                $size = 0
+                Get-ChildItem $dialog.SelectedPath -Recurse -File -ErrorAction SilentlyContinue | 
+                    ForEach-Object { $size += $_.Length }
+                
+                $item = [PSCustomObject]@{
+                    Name = $folderInfo.Name
+                    FullPath = $folderInfo.FullName
+                    Type = 'Folder'
+                    Size = [math]::Round($size / 1MB, 2)
+                    Selected = $true
+                }
+                $script:controls.lvwFileList.Items.Add($item)
+                Update-SpaceLabels
+            }
+        }
+        else {
+            $dialog = New-Object System.Windows.Forms.OpenFileDialog
+            $dialog.Title = "Select file to backup"
+            $dialog.InitialDirectory = $env:USERPROFILE
+            $dialog.Multiselect = $true
+            
+            if ($dialog.ShowDialog() -eq 'OK') {
+                foreach ($file in $dialog.FileNames) {
+                    $fileInfo = Get-Item $file
+                    $item = [PSCustomObject]@{
+                        Name = $fileInfo.Name
+                        FullPath = $fileInfo.FullName
+                        Type = 'File'
+                        Size = [math]::Round($fileInfo.Length / 1MB, 2)
+                        Selected = $true
+                    }
+                    $script:controls.lvwFileList.Items.Add($item)
+                }
+                Update-SpaceLabels
+            }
+        }
+    })
+
+    $script:controls.btnReset.Add_Click({
+        $script:controls.TxtSaveLoc.Text = ""
+        $script:controls.lvwFileList.Items.Clear()
+        $script:controls.chk_networkDrives.IsChecked = $true
+        $script:controls.chk_Printers.IsChecked = $true
+        $script:controls.lblFreeSpace.Content = ""
+        $script:controls.lblRequiredSpace.Content = ""
+    })
+
+    $script:controls.btnStart.Add_Click({
+        if (-not $script:controls.TxtSaveLoc.Text) {
+            Show-UserPrompt -Message "Please select a backup location" -Title "Required Field"
+            return
+        }
+
+        $operation = Show-UserPrompt -Message 'Select operation' -Title 'Backup/Restore' -ButtonText @('Backup', 'Restore')
+        if ($operation) {
+            $result = Start-BackupRestore -Path $script:controls.TxtSaveLoc.Text -Operation $operation
             
             if ($result -and $operation -eq 'Restore') {
                 $runGpUpdate = Show-UserPrompt -Message 'Run GPUpdate now?' -Title 'GPUpdate' -ButtonText @('Yes', 'No')
@@ -355,7 +506,20 @@ try {
                 }
             }
         }
-    }
+    })
+
+    # Add event handler for ListView selection changes
+    $script:controls.lvwFileList.Add_SelectionChanged({
+        Update-SpaceLabels
+    })
+
+    return $window
+}
+
+# Main script execution
+try {
+    $mainWindow = Initialize-GUI
+    $mainWindow.ShowDialog()
 }
 catch {
     Write-Warning ("Script execution failed: {0}" -f $_.Exception.Message)

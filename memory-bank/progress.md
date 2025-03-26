@@ -14,13 +14,13 @@ graph TD
     
     subgraph In_Progress
         E[Default Paths]
-        F[Browser Data]
-        G[Network Config]
+        F[Initial Flow]
+        G[File List CSV]
     end
     
     subgraph Pending
-        H[OneNote Books]
-        I[PST Handling]
+        H[Path Auto-detection]
+        I[Restore Flow]
         J[Enhanced Recovery]
     end
 ```
@@ -32,6 +32,7 @@ graph TD
 - ✅ Progress bars
 - ✅ User prompts
 - ✅ File/folder selection
+- ✅ Space calculations
 
 ### 2. Backup Operations
 - ✅ User profile backup
@@ -53,142 +54,110 @@ graph TD
 
 ## In Progress
 
-### 1. Default Paths
-- 🔄 C:\local implementation
-- 🔄 C:\local\backupfolder setup
+### 1. Default Paths Enhancement
+- 🔄 Required paths implementation
+- 🔄 Optional paths setup
 - 🔄 Path validation
-- 🔄 Permission handling
+- 🔄 Automatic path detection
 
-### 2. Browser Integration
-- 🔄 Edge favorites export
-- 🔄 Chrome favorites backup
-- 🔄 Chrome to Edge import
-- 🔄 Profile management
+### 2. Flow Improvements
+- 🔄 Initial GPUpdate prompt
+- 🔄 Backup/Restore selection
+- 🔄 Path scanning
+- 🔄 CSV file generation
 
-### 3. Network Configuration
-- 🔄 Drive mapping improvements
-- 🔄 Printer setup enhancements
-- 🔄 Quick access backup
-- 🔄 Network timeout handling
+### 3. Data Management
+- 🔄 FileList CSV creation
+- 🔄 Original location tracking
+- 🔄 Restore path mapping
+- 🔄 Data validation
 
 ## Pending Features
 
-### 1. Application Data
+### 1. Path Handling
 ```mermaid
 graph TD
-    A[Application Data] --> B[OneNote Books]
-    A --> C[PST Files]
-    A --> D[Sticky Notes]
+    A[Path Management] --> B[Auto-detection]
+    A --> C[Validation]
+    A --> D[Default Setup]
     
-    B --> E[Mapping]
-    B --> F[Sync Status]
+    B --> E[Required Paths]
+    B --> F[Optional Paths]
     
-    C --> G[Location Detection]
-    C --> H[Size Management]
+    C --> G[Existence Check]
+    C --> H[Permission Check]
     
-    D --> I[Version Handling]
-    D --> J[Data Migration]
+    D --> I[Initial Setup]
+    D --> J[Configuration]
 ```
 
 ### 2. System Configuration
-- ⏳ Enhanced certificate management
-- ⏳ Service configuration improvements
+- ⏳ Enhanced path detection
+- ⏳ Default path configuration
 - ⏳ Additional validation checks
 - ⏳ Recovery point creation
 
 ### 3. Performance Enhancements
-- ⏳ Large file optimization
-- ⏳ Network transfer improvements
+- ⏳ Path scanning optimization
+- ⏳ CSV file handling
 - ⏳ Progress calculation accuracy
 - ⏳ Memory usage optimization
 
 ## Known Issues
 
 ### 1. Technical Limitations
-- 🐛 PST file size constraints
-- 🐛 Network timeout handling
+- 🐛 Path detection reliability
+- 🐛 CSV file handling
 - 🐛 Cross-version compatibility
 - 🐛 Permission edge cases
 
 ### 2. User Experience
-- 🐛 Progress accuracy for large files
-- 🐛 Network status feedback
+- 🐛 Initial flow clarity
+- 🐛 Default path feedback
 - 🐛 Error message clarity
 - 🐛 Recovery options display
-
-### 3. Implementation Gaps
-- 🐛 Browser profile handling
-- 🐛 OneNote sync status
-- 🐛 Service state persistence
-- 🐛 Network retry logic
 
 ## Next Release Target
 
 ### 1. Priority Features
 ```mermaid
 graph TD
-    A[Release Goals] --> B[Default Paths]
-    A --> C[Browser Data]
-    A --> D[Network Config]
+    A[Release Goals] --> B[Flow Enhancement]
+    A --> C[Path Management]
+    A --> D[Data Tracking]
     
-    B --> E[Implementation]
+    B --> E[GPUpdate/Selection]
     B --> F[Validation]
     
-    C --> G[Export/Import]
-    C --> H[Profile Handling]
+    C --> G[Auto-detection]
+    C --> H[Configuration]
     
-    D --> I[Mapping]
-    D --> J[Persistence]
+    D --> I[CSV Handling]
+    D --> J[Location Mapping]
 ```
 
 ### 2. Critical Fixes
-- 🎯 PST file handling
-- 🎯 Network resilience
+- 🎯 Path detection
+- 🎯 Flow improvements
 - 🎯 Progress accuracy
 - 🎯 Error recovery
 
 ### 3. Documentation
-- 🎯 User guide updates
-- 🎯 Admin documentation
+- 🎯 Flow documentation
+- 🎯 Path configuration
 - 🎯 Error reference
 - 🎯 Recovery procedures
-
-## Testing Status
-
-### 1. Completed Tests
-- ✅ Basic backup/restore
-- ✅ GUI functionality
-- ✅ Progress tracking
-- ✅ Error handling
-
-### 2. In Progress
-- 🔄 Default path validation
-- 🔄 Browser data migration
-- 🔄 Network configuration
-- 🔄 Large file handling
-
-### 3. Planned Tests
-- ⏳ Cross-machine migration
-- ⏳ Network resilience
-- ⏳ Recovery scenarios
-- ⏳ Performance metrics
 
 ## Success Metrics
 
 ### 1. Performance
-- 📊 File transfer speed
-- 📊 Memory usage
-- 📊 Network efficiency
+- 📊 Path scan speed
+- 📊 CSV processing
+- 📊 Flow efficiency
 - 📊 UI responsiveness
 
 ### 2. Reliability
-- 📊 Error recovery rate
+- 📊 Path detection accuracy
 - 📊 Data integrity
-- 📊 Network resilience
+- 📊 Flow consistency
 - 📊 Configuration persistence
-
-### 3. User Experience
-- 📊 Task completion rate
-- 📊 Error clarity
-- 📊 Progress accuracy
-- 📊 Recovery success
