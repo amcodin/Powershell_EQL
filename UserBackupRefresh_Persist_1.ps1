@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿#requires -Version 3.0
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿#requires -Version 3.0
 ##########################################
 #        Client Data Backup Tool         #
 #       Written By Stephen Onions        #
@@ -16,6 +16,7 @@
 # 4) Simplified LocalData path handling          #localdata
 # 5) Optimized UI/UX with WPF                   #uiupdate
 # 6) Better progress reporting                   #progress
+# 7) Added Sticky Notes backup support           #stickynotes
 ##########################################
 
 # Required assemblies #JV2025
@@ -40,6 +41,8 @@ $script:BackupPaths = @{
         @{Path = "$env:SystemDrive\Temp"; Description = "Temp folder"}
         @{Path = "$env:APPDATA\google\googleearth\myplaces.kml"; Description = "Google Earth KML"}
         @{Path = "$ENV:LOCALAPPDATA\Google\Chrome\User Data\Default\Bookmarks"; Description = "Chrome Bookmarks"}
+        @{Path = "$env:LOCALAPPDATA\Packages\Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe\LocalState\plum.sqlite"; Description = "Windows 10/11 Sticky Notes"} #stickynotes
+        @{Path = "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt"; Description = "Legacy Sticky Notes"} #stickynotes
     )
 }
 
