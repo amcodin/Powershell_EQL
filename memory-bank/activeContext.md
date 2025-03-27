@@ -4,42 +4,47 @@
 Initial setup and documentation of the project's memory bank. This establishes the foundation for tracking and managing the PowerShell User Data Backup/Restore Utility development.
 
 ## Recent Changes
-1. Initial Creation:
-   - Created core memory bank files to document project
-   - Split functions into separate files in src/ directory
+1. Path Handling Improvements:
+   - Implemented smarter C:\LocalData handling
+   - Added automatic directory creation if missing
+   - Improved path validation and error messaging
+   - Enhanced browse dialog behavior
 
-2. Code Reorganization:
-   - Moved XAML definition from Initialize-MainWindow.ps1 to main script
-   - Modified code structure for better script scope handling
-   - Simplified Chrome bookmarks handling
+2. UI/UX Enhancements:
+   - Fixed button text for Backup/Restore operations
+   - Added clearer error messages for invalid paths
+   - Improved path selection workflow
+   - Added better state handling for backup/restore modes
 
-3. Bug Investigation:
-   - Identified PowerShell parsing issues with script formatting
-   - Attempted various approaches to resolve syntax errors
+3. Error Handling:
+   - Added validation for non-existent paths
+   - Improved error messages for path-related issues
+   - Enhanced path access error handling
+   - Added safeguards for directory creation
 
 ## Next Steps
-1. Completed Changes:
-   - ✓ Renamed buttons to Backup/Restore
-   - ✓ Implemented default path (C:\LocalData)
-   - ✓ Added auto-path selection for Backup mode
-   - ✓ Fixed PowerShell syntax issues
-   
-2. Remaining Tasks:
-   - Verify network drive mapping behavior
-   - Test backup/restore functionality with new changes
-   - Consider additional error handling for path access
+1. Remaining Tasks:
+   - Mapped Network drive needs to make a csv file
+   - Each line of the CSV contains the drive letter, mapped_location, parsed by comma ,
+   - Review @/documentation/UserBackupRefresh_Persist_1_original.ps1 implementation and use that
+   - Ensure that the gpupdate ONLY occurs when restore button is pressed, directly after its pressed
+   - make a new file with a function to execute all windows-config-manager actions, read @config-manager-actions.md for instructions on setup
+   - The Restore files should always overwrite old files
+   - If many files are backed up from a location, create a folder in the backup folder
+   - Backed up files should keep there existing file name, never rename a backed up file
+   - 
 
-2. Future Work:
-   - Consider alternative code organization strategies
-   - Evaluate benefits of current modular approach
-   - Plan potential rollback to single-file implementation
-
-2. Plan development phases:
-   - Core backup functionality
-   - Core restore functionality
-   - GUI implementation
+2. Future Development:
+   - Core backup functionality completion
+   - Core restore functionality enhancement
    - Special case handling (OneNote, Sticky Notes)
-   - Testing and validation
+   - Network path validation improvements
+
+3. Testing Requirements:
+   - Verify backup functionality with default path
+   - Test path selection behavior in both modes
+   - Validate error handling for invalid paths
+   - Check network drive and printer handling
 
 ## Active Decisions
 1. **Documentation Structure**
@@ -63,12 +68,12 @@ Initial setup and documentation of the project's memory bank. This establishes t
    - Impact of file splitting on script performance
    - Maintenance considerations for multi-file structure
 
-2. **Integration Points**
+3. **Integration Points**
    - System service interactions
    - Application data handling
    - Network resource management
 
-3. **Development Priorities**
+4. **Development Priorities**
    - Core functionality implementation
    - GUI development
    - Error handling and recovery

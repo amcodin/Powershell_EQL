@@ -3,7 +3,7 @@ function Initialize-MainWindow {
     $reader = New-Object System.Xml.XmlNodeReader $XAML
     $window = [Windows.Markup.XamlReader]::Load($reader)
     
-    # Set default path if C:\LocalData exists
+    # Define default backup path
     $defaultPath = "C:\LocalData"
     
     # Get Controls
@@ -24,27 +24,42 @@ function Initialize-MainWindow {
     # Update button text to Backup/Restore
     $btnStart.Content = if ($script:isBackup) { "Backup" } else { "Restore" }
 
-    # Set default path if it exists
-    if (Test-Path $defaultPath) {
+    # Set default path for backup mode and ensure it exists
+    if ($script:isBackup) {
+        if (-not (Test-Path $defaultPath)) {
+            try {
+                New-Item -Path $defaultPath -ItemType Directory -Force | Out-Null
+            } catch {
+                Write-Warning "Could not create default backup path: $defaultPath"
+                return
+            }
+        }
         $script:txtSaveLoc.Text = $defaultPath
     }
 
     # Setup Event Handlers
     $btnBrowse.Add_Click({
-        if ($script:isBackup -and (Test-Path $defaultPath)) {
-            $script:txtSaveLoc.Text = $defaultPath
-        } else {
-            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-            $dialog.Description = if ($script:isBackup) {
-                "Select location to save backup"
+        $currentPath = $script:txtSaveLoc.Text
+        
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = if ($script:isBackup) { "Select location to save backup" } else { "Select backup to restore from" }
+        
+        if (Test-Path $currentPath) {
+            $dialog.SelectedPath = $currentPath
+        }
+        
+        $form = New-Object System.Windows.Forms.Form
+        $result = $dialog.ShowDialog($form)
+        
+        if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+            if (-not (Test-Path $dialog.SelectedPath)) {
+                [System.Windows.MessageBox]::Show(
+                    "Selected path does not exist. Please select a valid path.",
+                    "Invalid Path",
+                    [System.Windows.MessageBoxButton]::OK,
+                    [System.Windows.MessageBoxImage]::Warning
+                )
             } else {
-                "Select backup to restore from"
-            }
-            
-            $form = New-Object System.Windows.Forms.Form
-            $result = $dialog.ShowDialog($form)
-            
-            if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
                 $script:txtSaveLoc.Text = $dialog.SelectedPath
                 
                 # If restoring, load the backup contents
@@ -61,10 +76,10 @@ function Initialize-MainWindow {
                         }
                 }
             }
-            
-            $form.Dispose()
-            $dialog.Dispose()
         }
+        
+        $form.Dispose()
+        $dialog.Dispose()
     })
     
     $btnAddFile.Add_Click({
@@ -118,12 +133,13 @@ function Initialize-MainWindow {
                 "Please select a location first.", 
                 "Required Field",
                 [System.Windows.MessageBoxButton]::OK,
-                [System.Windows.MessageBoxImage]::Warning)
+                [System.Windows.MessageBoxImage]::Warning
+            )
             return
         }
         
         try {
-            $script:lblStatus.Content = if ($script:isBackup) {"Backing up..."} else {"Restoring..."}
+            $script:lblStatus.Content = if ($script:isBackup) { "Backing up..." } else { "Restoring..." }
             $backupPath = $script:txtSaveLoc.Text
             
             if ($script:isBackup) {
@@ -139,8 +155,7 @@ function Initialize-MainWindow {
                 if ($item.Type -eq "Folder") {
                     try {
                         $totalFiles += Get-FileCount -Path $item.Path
-                    }
-                    catch {
+                    } catch {
                         Write-Warning "Could not access folder $($item.Path): $($_.Exception.Message)"
                     }
                 } else {
@@ -184,8 +199,7 @@ function Initialize-MainWindow {
                         Copy-Item -Path $item.Path -Destination $targetPath -Recurse -Force
                         $script:prgProgress.Value++
                     }
-                }
-                catch {
+                } catch {
                     Write-Warning "Failed to process $($item.Name): $($_.Exception.Message)"
                 }
             }
@@ -221,25 +235,26 @@ function Initialize-MainWindow {
             $script:prgProgress.Value = $script:prgProgress.Maximum
             
             [System.Windows.MessageBox]::Show(
-                $(if ($script:isBackup) {"Backup completed successfully!"} else {"Restore completed successfully!"}),
+                $(if ($script:isBackup) { "Backup completed successfully!" } else { "Restore completed successfully!" }),
                 "Success",
                 [System.Windows.MessageBoxButton]::OK,
-                [System.Windows.MessageBoxImage]::Information)
+                [System.Windows.MessageBoxImage]::Information
+            )
             
             if ($script:isBackup) {
                 Set-GPupdate
             }
             
             $script:lblStatus.Content = "Operation completed successfully"
-        }
-        catch {
+        } catch {
             $script:txtProgress.Text = "Operation failed"
             $script:lblStatus.Content = "Operation failed"
             [System.Windows.MessageBox]::Show(
                 "Operation failed: $($_.Exception.Message)",
                 "Error",
                 [System.Windows.MessageBoxButton]::OK,
-                [System.Windows.MessageBoxImage]::Error)
+                [System.Windows.MessageBoxImage]::Error
+            )
         }
     })
     
