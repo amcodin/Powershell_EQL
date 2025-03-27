@@ -1,4 +1,4 @@
-﻿﻿﻿﻿#requires -Version 3.0
+﻿﻿#requires -Version 3.0
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -52,21 +52,77 @@ Add-Type -AssemblyName System.Windows.Forms
 . "$PSScriptRoot\src\Restore-Printers.ps1"
 . "$PSScriptRoot\src\Initialize-MainWindow.ps1"
 
-# Default paths to backup/restore with safer user folder handling
-$script:DefaultPaths = @(
-    @{
-        Path = "$env:APPDATA\WinRAR"
-        Name = "Outlook Signatures"
-        Type = "Folder"
+function New-FilePathObject {
+    param (
+        [string]$Path,
+        [string]$Name,
+        [string]$Type
+    )
+    
+    if (-not $Name) { 
+        $Name = Split-Path $Path -Leaf 
     }
-)
+    
+    if (-not $Type) { 
+        if (Test-Path -Path $Path -PathType Container) {
+            $Type = "Folder"
+        } else {
+            $Type = "File"
+        }
+    }
+    
+    Write-Output ([PSCustomObject]@{
+        Path = $Path
+        Name = $Name
+        Type = $Type
+    })
+}
 
-# Add Chrome bookmarks only if accessible
+# Initialize default paths array
+$script:DefaultPaths = @()
+
+# Add Outlook signatures if they exist
+if(Test-Path -Path "$env:APPDATA\Microsoft\Signatures") {
+    $script:DefaultPaths += New-FilePathObject -Path "$env:APPDATA\Microsoft\Signatures" -Name "Outlook Signatures" -Type "Folder"
+}
+
+# Add User folder if it exists
+if(Test-Path -Path "$env:SystemDrive\User") {
+    $script:DefaultPaths += New-FilePathObject -Path "$env:SystemDrive\User" -Name "User Directory" -Type "Folder"
+}
+
+# Add Quick Access if it exists
+if(Test-Path -Path "$env:APPDATA\Microsoft\Windows\Recent\AutomaticDestinations\f01b4d95cf55d32a.automaticDestinations-ms") {
+    $script:DefaultPaths += New-FilePathObject -Path "$env:APPDATA\Microsoft\Windows\Recent\AutomaticDestinations\f01b4d95cf55d32a.automaticDestinations-ms" -Name "Quick Access" -Type "File"
+}
+
+# Add Temp folder if it exists
+if(Test-Path -Path "$env:SystemDrive\Temp") {
+    $script:DefaultPaths += New-FilePathObject -Path "$env:SystemDrive\Temp" -Name "Temp Directory" -Type "Folder"
+}
+
+# Add Sticky Notes data file (older version) if it exists
+if(Test-Path -Path "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt") {
+    $script:DefaultPaths += New-FilePathObject -Path "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt" -Name "Sticky Notes (Legacy)" -Type "File"
+}
+
+# Add Sticky Notes data file (Windows 10 v1607+) if it exists
+$stickyNotesPath = "$env:LOCALAPPDATA\Packages\Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe\LocalState\plum.sqlite"
+if(Test-Path -Path $stickyNotesPath) {
+    $script:DefaultPaths += New-FilePathObject -Path $stickyNotesPath -Name "Sticky Notes" -Type "File"
+}
+
+# Add Google Earth KML if it exists
+if(Test-Path -Path "$env:APPDATA\google\googleearth\myplaces.kml") {
+    $script:DefaultPaths += New-FilePathObject -Path "$env:APPDATA\google\googleearth\myplaces.kml" -Name "Google Earth Places" -Type "File"
+}
+
+# Add Chrome bookmarks if they exist and are accessible
 $chromePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Bookmarks"
 if (Test-Path $chromePath) {
     try {
-        $null = Get-Content $chromePath -ErrorAction Stop
-        $script:DefaultPaths += @{Path = $chromePath; Name = "Chrome Bookmarks"; Type = "File"}
+        Get-Content $chromePath -ErrorAction Stop | Out-Null
+        $script:DefaultPaths += New-FilePathObject -Path $chromePath -Name "Chrome Bookmarks" -Type "File"
     }
     catch {
         Write-Warning "Chrome bookmarks file not accessible"
@@ -75,11 +131,17 @@ if (Test-Path $chromePath) {
 
 # Main Execution
 try {
-    $result = [System.Windows.MessageBox]::Show("Would you like to perform a backup?`n`nClick 'Yes' for Backup`nClick 'No' for Restore", "Select Operation", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
-    $script:isBackup = $result -eq [System.Windows.MessageBoxResult]::Yes
+    $choice = [System.Windows.MessageBox]::Show(
+        "Would you like to perform a backup?`n`nClick 'Yes' for Backup`nClick 'No' for Restore",
+        "Select Operation",
+        [System.Windows.MessageBoxButton]::YesNo,
+        [System.Windows.MessageBoxImage]::Question
+    )
+    
+    $script:isBackup = $choice -eq [System.Windows.MessageBoxResult]::Yes
     
     $window = Initialize-MainWindow
-    $window.FindName('lblMode').Content = if ($script:isBackup) {"Mode: Backup"} else {"Mode: Restore"}
+    $window.FindName('lblMode').Content = if ($script:isBackup) { "Mode: Backup" } else { "Mode: Restore" }
     
     if ($script:isBackup) {
         Add-DefaultPaths
@@ -89,5 +151,10 @@ try {
 }
 catch {
     Write-Error $_.Exception.Message
-    [System.Windows.MessageBox]::Show("An error occurred: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+    [System.Windows.MessageBox]::Show(
+        "An error occurred: $($_.Exception.Message)",
+        "Error",
+        [System.Windows.MessageBoxButton]::OK,
+        [System.Windows.MessageBoxImage]::Error
+    )
 }
