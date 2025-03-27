@@ -3,6 +3,9 @@ function Initialize-MainWindow {
     $reader = New-Object System.Xml.XmlNodeReader $XAML
     $window = [Windows.Markup.XamlReader]::Load($reader)
     
+    # Set default path if C:\LocalData exists
+    $defaultPath = "C:\LocalData"
+    
     # Get Controls
     $script:txtSaveLoc = $window.FindName('txtSaveLoc')
     $script:btnBrowse = $window.FindName('btnBrowse')
@@ -18,36 +21,50 @@ function Initialize-MainWindow {
     $script:prgProgress = $window.FindName('prgProgress')
     $script:txtProgress = $window.FindName('txtProgress')
     
+    # Update button text to Backup/Restore
+    $btnStart.Content = if ($script:isBackup) { "Backup" } else { "Restore" }
+
+    # Set default path if it exists
+    if (Test-Path $defaultPath) {
+        $script:txtSaveLoc.Text = $defaultPath
+    }
+
     # Setup Event Handlers
     $btnBrowse.Add_Click({
-        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-        $dialog.Description = if ($script:isBackup) {
-            "Select location to save backup"
+        if ($script:isBackup -and (Test-Path $defaultPath)) {
+            $script:txtSaveLoc.Text = $defaultPath
         } else {
-            "Select backup to restore from"
-        }
-        
-        $form = New-Object System.Windows.Forms.Form
-        $result = $dialog.ShowDialog($form)
-        
-        if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-            $script:txtSaveLoc.Text = $dialog.SelectedPath
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dialog.Description = if ($script:isBackup) {
+                "Select location to save backup"
+            } else {
+                "Select backup to restore from"
+            }
             
-            # If restoring, load the backup contents
-            if (-not $script:isBackup) {
-                $script:lvwFiles.Items.Clear()
-                Get-ChildItem -Path $dialog.SelectedPath | Where-Object { $_.Name -notmatch '^(FileList_.*\.csv|Drives\.csv|Printers\.txt)$' } | ForEach-Object {
-                    $script:lvwFiles.Items.Add([PSCustomObject]@{
-                        Name = $_.Name
-                        Type = if ($_.PSIsContainer) { "Folder" } else { "File" }
-                        Path = $_.FullName
-                    })
+            $form = New-Object System.Windows.Forms.Form
+            $result = $dialog.ShowDialog($form)
+            
+            if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+                $script:txtSaveLoc.Text = $dialog.SelectedPath
+                
+                # If restoring, load the backup contents
+                if (-not $script:isBackup) {
+                    $script:lvwFiles.Items.Clear()
+                    Get-ChildItem -Path $dialog.SelectedPath | 
+                        Where-Object { $_.Name -notmatch '^(FileList_.*\.csv|Drives\.csv|Printers\.txt)$' } | 
+                        ForEach-Object {
+                            $script:lvwFiles.Items.Add([PSCustomObject]@{
+                                Name = $_.Name
+                                Type = if ($_.PSIsContainer) { "Folder" } else { "File" }
+                                Path = $_.FullName
+                            })
+                        }
                 }
             }
+            
+            $form.Dispose()
+            $dialog.Dispose()
         }
-        
-        $form.Dispose()
-        $dialog.Dispose()
     })
     
     $btnAddFile.Add_Click({

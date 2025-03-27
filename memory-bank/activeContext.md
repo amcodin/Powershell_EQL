@@ -18,11 +18,16 @@ Initial setup and documentation of the project's memory bank. This establishes t
    - Attempted various approaches to resolve syntax errors
 
 ## Next Steps
-1. Address Current Issues:
-   - Inside function Initialize-MainWindow, rename buttons to Restore and Backup, instead of Yes and No
-   - SelectedPath defaults to C:\LocalData when Selecting Backup or Restore
-   - When selecting Backup, the SelectedPath doesn't need to be pressed if C:\LocalData exists and it will use that location
-   - Mapped network drives, even if not connected, are saved
+1. Completed Changes:
+   - ✓ Renamed buttons to Backup/Restore
+   - ✓ Implemented default path (C:\LocalData)
+   - ✓ Added auto-path selection for Backup mode
+   - ✓ Fixed PowerShell syntax issues
+   
+2. Remaining Tasks:
+   - Verify network drive mapping behavior
+   - Test backup/restore functionality with new changes
+   - Consider additional error handling for path access
 
 2. Future Work:
    - Consider alternative code organization strategies
