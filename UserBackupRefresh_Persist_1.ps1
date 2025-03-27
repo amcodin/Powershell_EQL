@@ -1,4 +1,4 @@
-﻿﻿#requires -Version 3.0
+﻿﻿﻿#requires -Version 3.0
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -38,7 +38,7 @@ Add-Type -AssemblyName System.Windows.Forms
         
         <ProgressBar Name="prgProgress" Height="20" Margin="10,0,10,60" VerticalAlignment="Bottom"/>
         <TextBlock Name="txtProgress" Text="" Margin="10,0,10,85" VerticalAlignment="Bottom"/>
-        <Button Name="btnStart" Content="Start" Width="70" Height="30" Margin="10,0,0,20" VerticalAlignment="Bottom"/>
+        <Button Name="btnStart" Content="Start" Width="100" Height="30" Margin="10,0,0,20" VerticalAlignment="Bottom"/>
         <Label Name="lblStatus" Content="" Margin="90,0,0,20" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
     </Grid>
 </Window>
@@ -131,14 +131,30 @@ if (Test-Path $chromePath) {
 
 # Main Execution
 try {
-    $choice = [System.Windows.MessageBox]::Show(
-        "Would you like to perform a backup?`n`nClick 'Yes' for Backup`nClick 'No' for Restore",
-        "Select Operation",
-        [System.Windows.MessageBoxButton]::YesNo,
-        [System.Windows.MessageBoxImage]::Question
-    )
-    
-    $script:isBackup = $choice -eq [System.Windows.MessageBoxResult]::Yes
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "Select Operation"
+    $form.Size = New-Object System.Drawing.Size(300,150)
+    $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+
+    $btnBackup = New-Object System.Windows.Forms.Button
+    $btnBackup.Location = New-Object System.Drawing.Point(50,40)
+    $btnBackup.Size = New-Object System.Drawing.Size(80,30)
+    $btnBackup.Text = "Backup"
+    $btnBackup.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $form.Controls.Add($btnBackup)
+
+    $btnRestore = New-Object System.Windows.Forms.Button
+    $btnRestore.Location = New-Object System.Drawing.Point(150,40)
+    $btnRestore.Size = New-Object System.Drawing.Size(80,30)
+    $btnRestore.Text = "Restore"
+    $btnRestore.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+    $form.Controls.Add($btnRestore)
+
+    $form.AcceptButton = $btnBackup
+    $form.CancelButton = $btnRestore
+
+    $script:isBackup = $form.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK
+    $form.Dispose()
     
     $window = Initialize-MainWindow
     $window.FindName('lblMode').Content = if ($script:isBackup) { "Mode: Backup" } else { "Mode: Restore" }
