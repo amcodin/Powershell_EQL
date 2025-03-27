@@ -19,9 +19,10 @@ Initial setup and documentation of the project's memory bank. This establishes t
 
 ## Next Steps
 1. Address Current Issues:
-   - Resolve PowerShell parsing errors
-   - Test script execution flow
-   - Validate window initialization process
+   - Inside function Initialize-MainWindow, rename buttons to Restore and Backup, instead of Yes and No
+   - SelectedPath defaults to C:\LocalData when Selecting Backup or Restore
+   - When selecting Backup, the SelectedPath doesn't need to be pressed if C:\LocalData exists and it will use that location
+   - Mapped network drives, even if not connected, are saved
 
 2. Future Work:
    - Consider alternative code organization strategies
