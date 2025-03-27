@@ -1,189 +1,54 @@
 # Active Context
 
-## Current Development Focus
-
-### 1. Initial Flow Enhancement
-```mermaid
-graph TD
-    A[Initial Flow] --> B[GPUpdate Prompt]
-    A --> C[Operation Selection]
-    A --> D[Path Setup]
-    
-    B --> E[Run GPUpdate]
-    B --> F[Status Check]
-    
-    C --> G[Backup Flow]
-    C --> H[Restore Flow]
-    
-    D --> I[Required Paths]
-    D --> J[Optional Paths]
-```
-
-### 2. Active Implementation Tasks
-- **Initial Flow Implementation**
-  - Add GPUpdate prompt at start
-  - Implement Backup/Restore selection
-  - Set up required and optional paths
-  - Add CSV file management
-
-- **Path Management**
-  - Required paths configuration
-  - Optional paths setup
-  - Path existence validation
-  - Permission checks
-
-- **Data Tracking**
-  - FileList CSV creation
-  - Original location tracking
-  - Path mapping for restore
-  - Data validation and verification
-
-### 3. Core Function Updates
-```mermaid
-graph LR
-    A[Initialize-Form] --> B[Initial Prompts]
-    B --> C[Path Setup]
-    C --> D[Flow Selection]
-```
+## Current Work Focus
+Initial setup and documentation of the project's memory bank. This establishes the foundation for tracking and managing the PowerShell User Data Backup/Restore Utility development.
 
 ## Recent Changes
+1. Initial Creation:
+   - Created core memory bank files to document project
+   - Split functions into separate files in src/ directory
 
-### 1. Code Implementation
-- Identified need for GPUpdate prompt
-- Found missing path auto-detection
-- Discovered CSV tracking requirements
-- Located flow control improvements
-
-### 2. Architecture Updates
-- Planned flow reorganization
-- Enhanced path management
-- Improved CSV handling
-- Added validation checks
-
-### 3. Documentation
-- Updated progress tracking
-- Enhanced implementation status
-- Added new requirements
-- Documented flow changes
+2. Bug Fix:
+   - Moved XAML definition from Initialize-MainWindow.ps1 to main script
+   - Fixed script scope issue with XAML variable
 
 ## Next Steps
+1. Continue refactoring:
+   - Test the current implementation thoroughly
+   - Identify any additional scope or variable issues
+   - Plan for merging back into single file
 
-### 1. Immediate Tasks
-```mermaid
-graph TD
-    A[Current Sprint] --> B[Flow Control]
-    A --> C[Path Management]
-    A --> D[Data Tracking]
-    
-    B --> E[GPUpdate]
-    B --> F[Operation Selection]
-    
-    C --> G[Auto-detection]
-    C --> H[Validation]
-    
-    D --> I[CSV Creation]
-    D --> J[Location Mapping]
-```
-
-### 2. Planned Features
-- Enhanced flow control
-- Automatic path detection
-- CSV file management
-- Improved restore mapping
-
-### 3. Technical Debt
-- Refactor initialization logic
-- Enhance path validation
-- Optimize CSV handling
-- Improve flow control
+2. Plan development phases:
+   - Core backup functionality
+   - Core restore functionality
+   - GUI implementation
+   - Special case handling (OneNote, Sticky Notes)
+   - Testing and validation
 
 ## Active Decisions
+1. **Documentation Structure**
+   - Memory bank established with core files
+   - Clear separation of concerns in documentation
+   - Mermaid diagrams for visual representation
 
-### 1. Implementation Choices
-- Move GPUpdate prompt to start
-- Add operation selection dialog
-- Implement automatic path scanning
-- Add CSV file management
+2. **Project Organization**
+   - Original script preserved in documentation folder
+   - New implementation in root directory
+   - Documentation folder for additional resources
 
-### 2. Technical Approaches
-```mermaid
-graph TD
-    A[Implementation] --> B[Flow Control]
-    A --> C[Path Management]
-    A --> D[Data Tracking]
-    
-    B --> E[Initialization]
-    B --> F[User Prompts]
-    
-    C --> G[Auto-detection]
-    C --> H[Validation]
-    
-    D --> I[CSV Handling]
-    D --> J[Location Mapping]
-```
+## Current Considerations
+1. **Script Architecture**
+   - Maintaining proper variable scope across files
+   - Ensuring dependencies are loaded in correct order
+   - Managing shared resources (like XAML)
 
-### 3. Open Questions
-- Path detection reliability
-- CSV file format
-- Flow control structure
-- Error handling approach
+2. **Integration Points**
+   - System service interactions
+   - Application data handling
+   - Network resource management
 
-## Development Guidelines
-
-### 1. Code Standards
-- Clear flow control
-- Consistent path handling
-- CSV file management
-- User interaction
-
-### 2. Testing Requirements
-- Flow validation
-- Path detection
-- CSV handling
-- Error scenarios
-
-### 3. Documentation Updates
-- Flow description
-- Path configuration
-- CSV format
-- User instructions
-
-## Current Challenges
-
-### 1. Technical Issues
-- Path detection accuracy
-- CSV file management
-- Flow control reliability
-- Cross-version compatibility
-
-### 2. Implementation Concerns
-- Initial flow clarity
-- Path validation
-- Data persistence
-- Error recovery
-
-### 3. Future Considerations
-- Enhanced path detection
-- Improved CSV handling
-- Better flow control
-- Additional validation
-
-## Project Status
-
-### 1. Completed Items
-- Basic GUI implementation
-- Initial backup/restore
-- Progress tracking
-- Error handling
-
-### 2. In Progress
-- Flow enhancement
-- Path management
-- CSV handling
-- Data tracking
-
-### 3. Upcoming Work
-- Enhanced path detection
-- Improved CSV management
-- Better flow control
-- Additional validation
+3. **Development Priorities**
+   - Core functionality implementation
+   - GUI development
+   - Error handling and recovery
+   - Progress tracking and user feedback

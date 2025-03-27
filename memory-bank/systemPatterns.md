@@ -4,172 +4,82 @@
 
 ```mermaid
 graph TD
-    subgraph GUI_Layer
-        A[Initialize-Form] --> B[XAML Interface]
-        B --> C[Progress Bars]
-        B --> D[User Prompts]
-    end
-
-    subgraph Core_Operations
-        E[Backup Module] --> F[File Operations]
-        G[Restore Module] --> F
-        F --> H[Registry Operations]
-        F --> I[Network Operations]
-    end
-
-    subgraph Utility_Layer
-        J[Helper Functions] --> K[Path Processing]
-        J --> L[Error Handling]
-        J --> M[Progress Tracking]
-    end
-
-    GUI_Layer --> Core_Operations
-    Core_Operations --> Utility_Layer
-```
-
-## Key Components
-
-### 1. GUI Framework
-```mermaid
-classDiagram
-    class MainWindow {
-        +Initialize-Form()
-        +Show-ProgressBar()
-        +Update-ProgressBar()
-        +Show-UserPrompt()
-    }
-    class Controls {
-        +ListView
-        +Buttons
-        +CheckBoxes
-        +TextBoxes
-    }
-    class EventHandlers {
-        +Button_Click()
-        +Selection_Changed()
-        +ContentRendered()
-    }
-    MainWindow -- Controls
-    MainWindow -- EventHandlers
-```
-
-### 2. Backup System
-```mermaid
-classDiagram
-    class BackupManager {
-        +Set-InitialStateBackup()
-        +Start-Backup()
-        +Add-BackupLocation()
-    }
-    class FileOperations {
-        +Copy-File()
-        +Get-FilePath()
-        +Format-RegexSafe()
-    }
-    class ConfigurationBackup {
-        +Network Drives
-        +Printers
-        +Browser Settings
-    }
-    BackupManager -- FileOperations
-    BackupManager -- ConfigurationBackup
-```
-
-### 3. Restore System
-```mermaid
-classDiagram
-    class RestoreManager {
-        +Set-InitialStateRestore()
-        +Start-Restore()
-        +Set-GPupdate()
-    }
-    class DataVerification {
-        +Validate-Paths()
-        +Check-Permissions()
-        +Verify-Integrity()
-    }
-    class PostRestore {
-        +Configure-Services()
-        +Update-Certificates()
-        +Apply-Settings()
-    }
-    RestoreManager -- DataVerification
-    RestoreManager -- PostRestore
+    GUI[GUI Layer] --> Core[Core Operations]
+    Core --> BackupMgr[Backup Manager]
+    Core --> RestoreMgr[Restore Manager]
+    
+    BackupMgr --> FSOps[File System Operations]
+    BackupMgr --> NetOps[Network Operations]
+    BackupMgr --> RegOps[Registry Operations]
+    
+    RestoreMgr --> FSOps
+    RestoreMgr --> NetOps
+    RestoreMgr --> RegOps
+    RestoreMgr --> SysOps[System Operations]
 ```
 
 ## Design Patterns
 
 ### 1. Module Pattern
-- Separate functional areas
-  - GUI Module
-  - Backup Module
-  - Restore Module
-  - Utility Module
-- Clear dependency management
-- Encapsulated functionality
+- Separate core functionality into distinct PowerShell script blocks
+- Clear separation of concerns between backup and restore operations
+- Modular approach to file system, network, and registry operations
 
-### 2. Event-Driven Architecture
-- GUI events trigger operations
-- Progress updates drive display
-- Error events manage recovery
-- User prompts handle decisions
+### 2. Frontend-Backend Separation
+- XAML-based GUI layer for user interaction
+- Core logic separated from presentation
+- Event-driven communication between layers
 
-### 3. Pipeline Pattern
+### 3. State Management
+- Initialization states for both backup and restore operations
+- Progress tracking through shared state objects
+- Error state handling and recovery
+
+### 4. Operation Pipeline
 ```mermaid
 graph LR
-    A[Input] -->|Validation| B[Processing]
-    B -->|Progress| C[Output]
-    B -->|Events| D[Logging]
-    B -->|Errors| E[Recovery]
+    Init[Initialize] --> Validate[Validate]
+    Validate --> Process[Process]
+    Process --> Verify[Verify]
+    Verify --> Complete[Complete]
 ```
 
 ## Component Relationships
 
-### Data Flow
+### Core Functions
+1. **Initialization Components**
+   - Set-InitialStateAdminBackup
+   - Set-InitialStateBackup
+   - Set-InitialStateRestore
+
+2. **Operation Components**
+   - Start-Backup
+   - Start-Restore
+   - Set-GPupdate
+
+3. **UI Components**
+   - Initialize-Form
+   - Show-ProgressBar
+   - Update-ProgressBar
+   - Show-UserPrompt
+
+### Data Flow Patterns
 ```mermaid
 graph TD
-    A[User Input] -->|GUI| B[Validation]
-    B -->|Valid| C[Processing]
-    B -->|Invalid| D[Error Handler]
-    C -->|Progress| E[Display]
-    C -->|Complete| F[Confirmation]
-    C -->|Log| G[File System]
+    Input[User Input] --> Validation[Input Validation]
+    Validation --> Processing[Processing]
+    Processing --> Progress[Progress Updates]
+    Progress --> Output[Operation Complete]
 ```
 
-### Error Handling
-```mermaid
-graph TD
-    A[Operation] -->|Error| B[Handler]
-    B --> C{Type}
-    C -->|Path| D[Path Resolution]
-    C -->|Permission| E[Elevation]
-    C -->|Network| F[Retry Logic]
-    C -->|Unknown| G[User Prompt]
-```
+## Error Handling Strategy
+1. Try-Catch blocks for operation-level errors
+2. User feedback through GUI for critical errors
+3. Logging for administrative review
+4. Recovery procedures for common failure scenarios
 
-## Implementation Guidelines
-
-### 1. Function Structure
-- Clear single responsibility
-- Parameter validation
-- Error handling
-- Progress reporting
-- Return values
-
-### 2. Error Management
-- Try-Catch blocks
-- User notifications
-- Recovery options
-- Logging
-
-### 3. Progress Tracking
-- Operation status
-- Sub-task progress
-- Time estimation
-- User feedback
-
-### 4. State Management
-- Session persistence
-- Configuration tracking
-- Operation history
-- Recovery points
+## Code Organization
+1. Function grouping by operation type
+2. Shared utility functions
+3. GUI-specific code separation
+4. Configuration and constant management

@@ -2,7 +2,7 @@
 .Environment
 .env
 *.env
-
+memory-bank-old/
 
 docs/*
 docs/

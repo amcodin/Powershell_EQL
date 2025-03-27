@@ -1,7 +1,11 @@
 # Project Brief: PowerShell User Data Backup/Restore Utility
 
 ## Overview
-A PowerShell-based utility for comprehensive user data backup and restore operations, designed for IT administrators and support staff to manage user data migration and backup processes. The tool features a GUI interface and supports PowerShell version 3.0 while maintaining compatibility with version 1.
+Rewrite of a PowerShell-based utility for comprehensive user data backup and restore operations, designed for IT administrators and support staff to manage user data migration and backup processes. The tool features a GUI interface and supports PowerShell version 3.0 while maintaining compatibility with version 1.
+
+Original file used for examples is stored in documentation\UserBackupRefresh_Persist_1_original.ps1
+
+New rewrite file is UserBackupRefresh_Persist_1.ps1
 
 ## Core Requirements
 
@@ -16,8 +20,7 @@ A PowerShell-based utility for comprehensive user data backup and restore operat
 ### Restore Process
 - Restore user data to original or new locations
 - Handle user profile directory restoration
-- Reestablish network connections and printer mappings
-- Support cross-machine restoration
+- Reestablish mapped-network connections and printer mappings
 - Automated configuration manager actions
 - Certificate management for WiFi
 
@@ -53,10 +56,8 @@ A PowerShell-based utility for comprehensive user data backup and restore operat
    - Edge favorites export
    - Chrome favorites import to Edge
 4. Sticky notes data backup
-5. OneNote mapped books backup
-6. Network drive mapping preservation
-7. Printer configuration backup
-8. PST file detection and handling
+5. Network drive mapping preservation
+6. Printer configuration backup
 
 ### Restore Operations
 1. GPupdate execution in separate CMD instance
@@ -77,8 +78,9 @@ A PowerShell-based utility for comprehensive user data backup and restore operat
 
 ## Development Guidelines
 1. Error handling with user feedback
-2. Progress tracking for all operations
-3. Backup validation
-4. Restore verification
-5. User permission management
-6. Cross-machine compatibility
+2. Comments on syntax and program logic
+3. Progress tracking for all operations
+4. Backup validation
+5. Restore verification
+6. User permission management
+7. Cross-machine compatibility
