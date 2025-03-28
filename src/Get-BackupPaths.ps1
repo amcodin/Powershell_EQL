@@ -3,23 +3,23 @@ function Get-BackupPaths {
     param ()
     
     $pathsToCheck = @(
-        @{Path = "$env:APPDATA\Microsoft\Signatures"; Name = "Outlook Signatures"; Type = "Folder"}
-        @{Path = "$env:SystemDrive\User"; Name = "User Directory"; Type = "Folder"}
-        @{Path = "$env:APPDATA\Microsoft\Windows\Recent\AutomaticDestinations\f01b4d95cf55d32a.automaticDestinations-ms"; Name = "Quick Access"; Type = "File"}
-        @{Path = "$env:SystemDrive\Temp"; Name = "Temp Directory"; Type = "Folder"}
-        @{Path = "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt"; Name = "Sticky Notes (Legacy)"; Type = "File"}
-        @{Path = "$env:LOCALAPPDATA\Packages\Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe\LocalState\plum.sqlite"; Name = "Sticky Notes"; Type = "File"}
-        @{Path = "$env:APPDATA\google\googleearth\myplaces.kml"; Name = "Google Earth Places"; Type = "File"}
+        "$env:APPDATA\Microsoft\Signatures",
+        "$env:SystemDrive\User",
+        "$env:APPDATA\Microsoft\Windows\Recent\AutomaticDestinations\f01b4d95cf55d32a.automaticDestinations-ms",
+        "$env:SystemDrive\Temp",
+        "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt",
+        "$env:LOCALAPPDATA\Packages\Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe\LocalState\plum.sqlite",
+        "$env:APPDATA\google\googleearth\myplaces.kml"
     )
 
     $result = @()
 
-    foreach ($item in $pathsToCheck) {
-        if (Test-Path -Path $item.Path) {
+    foreach ($path in $pathsToCheck) {
+        if (Test-Path -Path $path) {
             $result += [PSCustomObject]@{
-                Name = $item.Name
-                Path = $item.Path
-                Type = $item.Type
+                Name = Split-Path $path -Leaf
+                Path = $path
+                Type = if (Test-Path -Path $path -PathType Container) { "Folder" } else { "File" }
             }
         }
     }
@@ -30,7 +30,7 @@ function Get-BackupPaths {
         if (Test-Path $chromePath) {
             Get-Content $chromePath -ErrorAction Stop | Out-Null
             $result += [PSCustomObject]@{
-                Name = "Chrome Bookmarks"
+                Name = "Bookmarks"  # Chrome's actual bookmark file name
                 Path = $chromePath
                 Type = "File"
             }

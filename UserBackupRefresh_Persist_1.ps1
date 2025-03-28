@@ -44,6 +44,9 @@ Add-Type -AssemblyName System.Windows.Forms
 </Window>
 '@
 
+# Dot source function files
+. "$PSScriptRoot\src\Get-BackupPaths.ps1"
+
 # Show mode selection dialog
 function Show-ModeDialog {
     $form = New-Object System.Windows.Forms.Form
@@ -104,8 +107,16 @@ function Show-MainWindow {
         }
         $controls.txtSaveLoc.Text = $defaultPath
 
-        # If in restore mode, look for most recent backup
-        if (-not $IsBackup -and (Test-Path $defaultPath)) {
+        # Load initial items based on mode
+        if ($IsBackup) {
+            # Load default backup paths
+            $paths = Get-BackupPaths
+            foreach ($path in $paths) {
+                $controls.lvwFiles.Items.Add($path)
+            }
+        }
+        elseif (Test-Path $defaultPath) {
+            # Look for most recent backup
             $latestBackup = Get-ChildItem -Path $defaultPath -Directory |
                 Where-Object { $_.Name -like "Backup_*" } |
                 Sort-Object LastWriteTime -Descending |
@@ -201,43 +212,6 @@ function Show-MainWindow {
                     $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
                     $backupPath = Join-Path $backupPath "Backup_$timestamp"
                     New-Item -Path $backupPath -ItemType Directory -Force | Out-Null
-
-                    # Load default backup paths
-                    $controls.lvwFiles.Items.Clear()
-                    $defaultPaths = @(
-                        @{Path = "$env:APPDATA\Microsoft\Signatures"; Name = "Outlook Signatures"; Type = "Folder"}
-                        @{Path = "$env:SystemDrive\User"; Name = "User Directory"; Type = "Folder"}
-                        @{Path = "$env:APPDATA\Microsoft\Windows\Recent\AutomaticDestinations\f01b4d95cf55d32a.automaticDestinations-ms"; Name = "Quick Access"; Type = "File"}
-                        @{Path = "$env:SystemDrive\Temp"; Name = "Temp Directory"; Type = "Folder"}
-                        @{Path = "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt"; Name = "Sticky Notes (Legacy)"; Type = "File"}
-                        @{Path = "$env:LOCALAPPDATA\Packages\Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe\LocalState\plum.sqlite"; Name = "Sticky Notes"; Type = "File"}
-                        @{Path = "$env:APPDATA\google\googleearth\myplaces.kml"; Name = "Google Earth Places"; Type = "File"}
-                    )
-
-                    foreach ($path in $defaultPaths) {
-                        if (Test-Path -Path $path.Path) {
-                            $controls.lvwFiles.Items.Add([PSCustomObject]@{
-                                Path = $path.Path
-                                Name = $path.Name
-                                Type = $path.Type
-                            })
-                        }
-                    }
-
-                    # Add Chrome bookmarks if accessible
-                    $chromePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Bookmarks"
-                    if (Test-Path $chromePath) {
-                        try {
-                            Get-Content $chromePath -ErrorAction Stop | Out-Null
-                            $controls.lvwFiles.Items.Add([PSCustomObject]@{
-                                Path = $chromePath
-                                Name = "Chrome Bookmarks"
-                                Type = "File"
-                            })
-                        } catch {
-                            Write-Warning "Chrome bookmarks file not accessible"
-                        }
-                    }
                 }
 
                 # Count total files
