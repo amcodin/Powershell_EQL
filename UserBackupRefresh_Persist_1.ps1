@@ -46,6 +46,8 @@ Add-Type -AssemblyName System.Windows.Forms
 
 # Dot source function files
 . "$PSScriptRoot\src\Get-BackupPaths.ps1"
+. "$PSScriptRoot\src\Start-ConfigManagerActions.ps1"
+. "$PSScriptRoot\src\Set-GPupdate.ps1"
 
 # Show mode selection dialog
 function Show-ModeDialog {
@@ -148,6 +150,7 @@ function Show-MainWindow {
                 
                 # If restoring, load backup contents
                 if (-not $IsBackup) {
+                    replace
                     $controls.lvwFiles.Items.Clear()
                     Get-ChildItem -Path $dialog.SelectedPath | 
                         Where-Object { $_.Name -notmatch '^(FileList_.*\.csv|Drives\.csv|Printers\.txt)$' } | 
@@ -286,7 +289,10 @@ function Show-MainWindow {
                             }
                         } else {
                             # Read CSV and restore files to original locations
+                            Set-GPupdate
+                            Start-ConfigManagerActions
                             $csvPath = Join-Path $backupPath "FileList_Backup.csv"
+
                             if (Test-Path $csvPath) {
                                 $backupFiles = Import-Csv $csvPath
                                 foreach ($file in $backupFiles) {
