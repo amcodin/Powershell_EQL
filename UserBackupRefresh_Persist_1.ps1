@@ -1,4 +1,4 @@
-﻿﻿#requires -Version 3.0
+﻿﻿﻿﻿#requires -Version 3.0
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -284,9 +284,37 @@ function Show-MainWindow {
                                 $controls.prgProgress.Value++
                             }
                         } else {
-                            $targetPath = Join-Path $env:USERPROFILE $item.Name
-                            Copy-Item -Path $item.Path -Destination $targetPath -Recurse -Force
-                            $controls.prgProgress.Value++
+                            # Read CSV and restore files to original locations
+                            $csvPath = Join-Path $backupPath "FileList_Backup.csv"
+                            if (Test-Path $csvPath) {
+                                $backupFiles = Import-Csv $csvPath
+                                foreach ($file in $backupFiles) {
+                                    if (Test-Path $file.SourceLocation) {
+                                        $sourcePath = Join-Path $backupPath $file.FileName
+                                        
+                                        # If it's a folder, process all files within it
+                                        if (Test-Path $sourcePath -PathType Container) {
+                                            Get-ChildItem -Path $sourcePath -Recurse -File | ForEach-Object {
+                                                $relativePath = $_.FullName.Substring($sourcePath.Length)
+                                                $originalPath = Join-Path $file.SourceLocation $relativePath
+                                                $originalDir = [System.IO.Path]::GetDirectoryName($originalPath)
+                                                
+                                                if (Test-Path $originalDir) {
+                                                    Copy-Item -Path $_.FullName -Destination $originalPath -Force
+                                                    $controls.prgProgress.Value++
+                                                    $controls.txtProgress.Text = "Restoring: $($_.Name)"
+                                                }
+                                            }
+                                        } else {
+                                            # Process single file
+                                            $targetPath = Join-Path $file.SourceLocation $file.FileName
+                                            Copy-Item -Path $sourcePath -Destination $targetPath -Force
+                                            $controls.prgProgress.Value++
+                                            $controls.txtProgress.Text = "Restoring: $($file.FileName)"
+                                        }
+                                    }
+                                }
+                            }
                         }
                     } catch {
                         Write-Warning "Failed to process $($item.Name): $($_.Exception.Message)"
