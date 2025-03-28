@@ -1,61 +1,94 @@
-Dialog Handling Improvements in UserBackupRefresh_Persist_1.ps1
-Issues Addressed
-WMI Query Syntax
+# Knowledge Transfer: Backup Tool Improvements
 
-Fixed incorrect syntax for querying drive space
-Changed from DeviceID='C':' to DeviceID='C:'
-Added proper error handling for WMI queries
-Dialog Resource Management
+## Current Development Focus
+We are improving the backup tool's handling of file paths and names, focusing on:
+- Preserving original filenames during backup operations
+- Optimizing path loading and management
+- Maintaining proper backup timing and initialization
 
-Implemented proper resource cleanup using try-finally blocks
-Added dialog disposal in finally blocks
-Fixed memory leaks from unclosed dialogs
-Dialog Result Handling
+## Key Changes Made
 
-Standardized dialog result checking
-Added proper error handling for dialog operations
-Improved error reporting to users
-Best Practices Implemented
-Dialog Initialization
-$dialog = $null
-try {
-    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    # ... dialog setup ...
-    
-    if ($dialog.ShowDialog() -eq 'OK') {
-        # ... handle results ...
-    }
-}
-catch {
-    Write-Warning ("Failed to show dialog: {0}" -f $_.Exception.Message)
-}
-finally {
-    if ($dialog) {
-        $dialog.Dispose()
-    }
-}
-Error Handling
+### Get-BackupPaths.ps1 Improvements
+- Moved from friendly names to actual filenames (e.g., "plum.sqlite" instead of "Sticky Notes")
+- Simplified path array structure
+- Added automatic file/folder type detection
+- Improved error handling for inaccessible paths
 
-Added specific error messages for different failure scenarios
-Implemented proper error propagation
-Added user-friendly error notifications
-Resource Cleanup
+### Main Script Integration
+1. Path Loading Timing
+   - Loads paths at window initialization for backup mode
+   - Preserves paths during backup folder creation
+   - Better handling of restore mode path detection
 
-Ensured all dialogs are properly disposed
-Implemented consistent cleanup patterns
-Added safeguards against resource leaks
-Testing Considerations
-When testing dialog implementations:
+2. File Processing
+   - Maintains original file structure
+   - Uses relative paths for proper directory recreation
+   - Improved progress tracking during operations
 
-Check dialog disposal in all code paths
-Verify error handling for all possible failure scenarios
-Ensure consistent behavior across different Windows versions
-Test cancel and close operations
-Verify memory usage patterns
-Future Improvements
-Potential areas for future enhancement:
+3. Error Handling
+   - Better warnings for inaccessible paths
+   - More informative error messages
+   - Graceful handling of missing files/folders
 
-Add logging for dialog operations
-Implement retry logic for transient failures
-Add additional dialog customization options
-Consider implementing async dialog operations
+## Technical Context
+
+### Why These Changes Were Needed
+1. Original Issue:
+   - Backup was using friendly names instead of actual filenames
+   - This caused problems during restore operations
+   - Made file tracking and verification difficult
+
+2. Path Loading Problems:
+   - Paths were being reset during backup folder creation
+   - Timing issues with when paths were loaded
+   - Inconsistent path handling between backup/restore modes
+
+### Implementation Details
+1. Path Handling:
+   ```powershell
+   # Old approach (using friendly names)
+   @{Path = $path; Name = "Friendly Name"; Type = "Folder"}
+
+   # New approach (using actual names)
+   @{
+       Name = Split-Path $path -Leaf  # Gets actual filename
+       Path = $path
+       Type = if (Test-Path -Path $path -PathType Container) { "Folder" } else { "File" }
+   }
+   ```
+
+2. Initialization Order:
+   - Load default paths at window creation
+   - Initialize UI elements
+   - Set up event handlers
+   - Handle mode-specific operations
+
+## Future Considerations
+
+### Watch Points
+1. Path Changes:
+   - Monitor system paths for Windows updates
+   - Check for app-specific path changes
+   - Verify path accessibility
+
+2. File Handling:
+   - Large file performance
+   - Network path timeouts
+   - Permission issues
+
+### Potential Improvements
+1. Performance:
+   - Parallel file processing
+   - Progress estimation
+   - Cancel operation support
+
+2. Usability:
+   - Better path validation
+   - Custom path management
+   - Backup verification
+
+### Maintenance Notes
+- Keep path definitions up to date
+- Test with various file types
+- Monitor Windows path changes
+- Check for app updates affecting paths

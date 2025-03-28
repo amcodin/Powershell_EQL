@@ -1,5 +1,23 @@
 # Project Progress
 
+## Backup Path Enhancements - March 28, 2025
+### Fixed Issues
+- Backup path loading timing fixed
+- Original file names now preserved
+- Better path handling implementation
+
+### Code Improvements
+- Moved from friendly names to actual filenames
+- Improved initialization timing
+- Added proper dot-sourcing
+- Fixed backup path population
+
+### Technical Details
+- Get-BackupPaths.ps1 simplified
+- Main script path handling optimized
+- Controls hashtable for better management
+- Proper event timing in backup mode
+
 ## Major Refactoring - March 28, 2025
 - Simplified entire codebase into a single, self-contained script
 - Removed unnecessary function files and dependencies
@@ -32,3 +50,5 @@
 ✅ Network drive support maintained
 ✅ Printer support maintained
 ✅ Simplified codebase achieved
+✅ Original filenames preserved
+✅ Path loading optimized
