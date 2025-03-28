@@ -1,4 +1,4 @@
-﻿#requires -Version 3.0
+﻿﻿#requires -Version 3.0
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -212,6 +212,15 @@ function Show-MainWindow {
                     $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
                     $backupPath = Join-Path $backupPath "Backup_$timestamp"
                     New-Item -Path $backupPath -ItemType Directory -Force | Out-Null
+
+                    # Create CSV file for logging backup locations
+                    try {
+                        $csvPath = Join-Path $backupPath "FileList_Backup.csv"
+                        "SourceLocation,FileName" | Set-Content -Path $csvPath
+                    }
+                    catch {
+                        Write-Warning "Failed to create backup log file: $($_.Exception.Message)"
+                    }
                 }
 
                 # Count total files
@@ -243,6 +252,13 @@ function Show-MainWindow {
                         if ($IsBackup) {
                             $dest = Join-Path $backupPath $item.Name
                             if ($item.Type -eq "Folder") {
+                                # Add folder to CSV log
+                                try {
+                                    $csvPath = Join-Path $backupPath "FileList_Backup.csv"
+                                    "`"$($item.Path)`",`"$($item.Name)`"" | Add-Content -Path $csvPath
+                                } catch {
+                                    Write-Warning "Failed to log folder location: $($_.Exception.Message)"
+                                }
                                 Get-ChildItem -Path $item.Path -Recurse -File | ForEach-Object {
                                     $relativePath = $_.FullName.Substring($item.Path.Length)
                                     $targetPath = Join-Path $dest $relativePath
@@ -257,6 +273,13 @@ function Show-MainWindow {
                                     $controls.txtProgress.Text = "Processing: $($_.Name)"
                                 }
                             } else {
+                                # Add file to CSV log
+                                try {
+                                    $csvPath = Join-Path $backupPath "FileList_Backup.csv"
+                                    "`"$([System.IO.Path]::GetDirectoryName($item.Path))`",`"$($item.Name)`"" | Add-Content -Path $csvPath
+                                } catch {
+                                    Write-Warning "Failed to log file location: $($_.Exception.Message)"
+                                }
                                 Copy-Item -Path $item.Path -Destination $dest -Force
                                 $controls.prgProgress.Value++
                             }
