@@ -1,4 +1,4 @@
-﻿﻿﻿﻿#requires -Version 3.0
+﻿#requires -Version 3.0
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -209,8 +209,9 @@ function Show-MainWindow {
                 $backupPath = $controls.txtSaveLoc.Text
 
                 if ($IsBackup) {
-                    $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-                    $backupPath = Join-Path $backupPath "Backup_$timestamp"
+                    $timestamp = Get-Date -Format "yyyy-MM-dd"
+                    $username = $env:USERNAME
+                    $backupPath = Join-Path $backupPath "Backup_${timestamp}_$username"
                     New-Item -Path $backupPath -ItemType Directory -Force | Out-Null
 
                     # Create CSV file for logging backup locations
