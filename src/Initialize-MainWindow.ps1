@@ -3,9 +3,6 @@ function Initialize-MainWindow {
     $reader = New-Object System.Xml.XmlNodeReader $XAML
     $window = [Windows.Markup.XamlReader]::Load($reader)
     
-    # Define default backup path
-    $defaultPath = "C:\LocalData"
-    
     # Get Controls
     $script:txtSaveLoc = $window.FindName('txtSaveLoc')
     $script:btnBrowse = $window.FindName('btnBrowse')
@@ -24,17 +21,39 @@ function Initialize-MainWindow {
     # Update button text to Backup/Restore
     $btnStart.Content = if ($script:isBackup) { "Backup" } else { "Restore" }
 
-    # Set default path for backup mode and ensure it exists
-    if ($script:isBackup) {
-        if (-not (Test-Path $defaultPath)) {
-            try {
-                New-Item -Path $defaultPath -ItemType Directory -Force | Out-Null
-            } catch {
-                Write-Warning "Could not create default backup path: $defaultPath"
-                return
-            }
+    # Set default path for both modes
+    $defaultPath = "C:\LocalData"
+    if (-not (Test-Path $defaultPath)) {
+        try {
+            New-Item -Path $defaultPath -ItemType Directory -Force | Out-Null
+        } catch {
+            Write-Warning "Could not create default path: $defaultPath"
+            return
         }
-        $script:txtSaveLoc.Text = $defaultPath
+    }
+    $script:txtSaveLoc.Text = $defaultPath
+
+    # If in restore mode, look for most recent backup
+    if (-not $script:isBackup -and (Test-Path $defaultPath)) {
+        $latestBackup = Get-ChildItem -Path $defaultPath -Directory |
+            Where-Object { $_.Name -like "Backup_*" } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+        if ($latestBackup) {
+            $script:txtSaveLoc.Text = $latestBackup.FullName
+            # Load backup contents
+            $script:lvwFiles.Items.Clear()
+            Get-ChildItem -Path $latestBackup.FullName | 
+                Where-Object { $_.Name -notmatch '^(FileList_.*\.csv|Drives\.csv|Printers\.txt)$' } | 
+                ForEach-Object {
+                    $script:lvwFiles.Items.Add([PSCustomObject]@{
+                        Name = $_.Name
+                        Type = if ($_.PSIsContainer) { "Folder" } else { "File" }
+                        Path = $_.FullName
+                    })
+                }
+        }
     }
 
     # Setup Event Handlers
@@ -147,6 +166,16 @@ function Initialize-MainWindow {
                 $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
                 $backupPath = Join-Path $backupPath "Backup_$timestamp"
                 New-Item -Path $backupPath -ItemType Directory -Force | Out-Null
+
+                # Get paths to check and update ListView
+                $script:lvwFiles.Items.Clear()
+                foreach ($path in (Get-BackupPaths)) {
+                    $script:lvwFiles.Items.Add($path)
+                }
+            } else {
+                # For restore, run updates first
+                Set-GPupdate
+                Start-ConfigManagerActions
             }
 
             # Count total files for progress bar
@@ -154,7 +183,7 @@ function Initialize-MainWindow {
             foreach ($item in $script:lvwFiles.Items) {
                 if ($item.Type -eq "Folder") {
                     try {
-                        $totalFiles += Get-FileCount -Path $item.Path
+                        $totalFiles += (Get-FileCount -Path $item.Path).Total
                     } catch {
                         Write-Warning "Could not access folder $($item.Path): $($_.Exception.Message)"
                     }
@@ -169,7 +198,7 @@ function Initialize-MainWindow {
             $script:prgProgress.Maximum = $totalFiles
             $script:prgProgress.Value = 0
 
-            # Files/Folders
+            # Process Files/Folders
             foreach ($item in $script:lvwFiles.Items) {
                 try {
                     $script:txtProgress.Text = "Processing: $($item.Name)"
@@ -212,7 +241,7 @@ function Initialize-MainWindow {
                         Select-Object Name, ProviderName |
                         Export-Csv -Path (Join-Path $backupPath "Drives.csv") -NoTypeInformation
                 } else {
-                    Restore-NetworkDrives -Path $backupPath
+                    Restore-NetworkDrives -BackupLocation $backupPath
                 }
                 $script:prgProgress.Value++
             }
@@ -240,10 +269,6 @@ function Initialize-MainWindow {
                 [System.Windows.MessageBoxButton]::OK,
                 [System.Windows.MessageBoxImage]::Information
             )
-            
-            if ($script:isBackup) {
-                Set-GPupdate
-            }
             
             $script:lblStatus.Content = "Operation completed successfully"
         } catch {

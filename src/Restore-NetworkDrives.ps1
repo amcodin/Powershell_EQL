@@ -1,28 +1,89 @@
 function Restore-NetworkDrives {
-    param([string]$Path)
-    
-    $drivePath = Join-Path $Path "Drives.csv"
-    if (Test-Path $drivePath) {
-        $drives = Import-Csv -Path $drivePath
-        foreach ($drive in $drives) {
-            try {
-                $letter = $drive.Name.Substring(0, 1)
-                Write-Host "Mapping drive $letter to $($drive.ProviderName)"
-                
-                # Remove existing mapping if present
-                $existing = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='$($letter):'"
-                if ($existing) {
-                    $net = New-Object -ComObject WScript.Network
-                    $net.RemoveNetworkDrive($letter)
-                }
-                
-                # Add new mapping
-                New-PSDrive -Name $letter -PSProvider FileSystem -Root $drive.ProviderName -Persist -Scope Global -ErrorAction Stop
-                Write-Host "Successfully mapped drive $letter" -ForegroundColor Green
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BackupLocation
+    )
+
+    $csvPath = Join-Path -Path $BackupLocation -ChildPath "Drives.csv"
+
+    # Verify backup file exists
+    if (-not (Test-Path -Path $csvPath)) {
+        Write-Warning "Network drives backup file not found at: $csvPath"
+        return
+    }
+
+    try {
+        # Import the CSV file
+        $driveMappings = Import-Csv -Path $csvPath
+
+        foreach ($mapping in $driveMappings) {
+            $driveLetter = $mapping.Name
+            $networkPath = $mapping.ProviderName
+
+            # Validate drive letter format
+            if ($driveLetter -notmatch '^[A-Z]:$') {
+                Write-Warning "Invalid drive letter format: $driveLetter - Skipping"
+                continue
             }
-            catch {
-                Write-Warning "Failed to map drive $letter`: $($_.Exception.Message)"
+
+            # Validate network path format
+            if ($networkPath -notmatch '^\\\\\w+\\\w+') {
+                Write-Warning "Invalid network path format: $networkPath - Skipping"
+                continue
+            }
+
+            # Check if drive letter is already in use
+            $existingDrive = Get-PSDrive -Name $driveLetter.TrimEnd(':') -ErrorAction SilentlyContinue
+            if ($existingDrive) {
+                Write-Warning "Drive letter $driveLetter already in use - Skipping"
+                continue
+            }
+
+            # Test network path accessibility with retry logic
+            $maxRetries = 3
+            $retryCount = 0
+            $success = $false
+
+            while (-not $success -and $retryCount -lt $maxRetries) {
+                try {
+                    if (Test-Path -Path $networkPath -ErrorAction Stop) {
+                        # Map the network drive with persistence and global scope
+                        $driveParams = @{
+                            Name = $driveLetter.TrimEnd(':')
+                            PSProvider = 'FileSystem'
+                            Root = $networkPath
+                            Persist = $true
+                            Scope = 'Global'
+                            ErrorAction = 'Stop'
+                        }
+
+                        New-PSDrive @driveParams
+                        Write-Verbose "Successfully mapped drive $driveLetter to $networkPath"
+                        $success = $true
+                    } else {
+                        Write-Warning "Network path not accessible: $networkPath"
+                        $retryCount++
+                        if ($retryCount -lt $maxRetries) {
+                            Start-Sleep -Seconds ($retryCount * 2)
+                        }
+                    }
+                }
+                catch {
+                    Write-Warning "Failed to map drive $driveLetter - Attempt $($retryCount + 1): $($_.Exception.Message)"
+                    $retryCount++
+                    if ($retryCount -lt $maxRetries) {
+                        Start-Sleep -Seconds ($retryCount * 2)
+                    }
+                }
+            }
+
+            if (-not $success) {
+                Write-Warning "Failed to map drive $driveLetter after $maxRetries attempts"
             }
         }
+    }
+    catch {
+        Write-Error "Error processing network drive mappings: $($_.Exception.Message)"
     }
 }

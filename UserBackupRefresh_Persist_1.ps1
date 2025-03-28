@@ -1,4 +1,4 @@
-﻿﻿﻿#requires -Version 3.0
+﻿#requires -Version 3.0
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -44,93 +44,8 @@ Add-Type -AssemblyName System.Windows.Forms
 </Window>
 '@
 
-# Dot source function files
-. "$PSScriptRoot\src\Set-GPupdate.ps1"
-. "$PSScriptRoot\src\Add-DefaultPaths.ps1"
-. "$PSScriptRoot\src\Get-FileCount.ps1"
-. "$PSScriptRoot\src\Restore-NetworkDrives.ps1"
-. "$PSScriptRoot\src\Restore-Printers.ps1"
-. "$PSScriptRoot\src\Initialize-MainWindow.ps1"
-
-function New-FilePathObject {
-    param (
-        [string]$Path,
-        [string]$Name,
-        [string]$Type
-    )
-    
-    if (-not $Name) { 
-        $Name = Split-Path $Path -Leaf 
-    }
-    
-    if (-not $Type) { 
-        if (Test-Path -Path $Path -PathType Container) {
-            $Type = "Folder"
-        } else {
-            $Type = "File"
-        }
-    }
-    
-    Write-Output ([PSCustomObject]@{
-        Path = $Path
-        Name = $Name
-        Type = $Type
-    })
-}
-
-# Initialize default paths array
-$script:DefaultPaths = @()
-
-# Add Outlook signatures if they exist
-if(Test-Path -Path "$env:APPDATA\Microsoft\Signatures") {
-    $script:DefaultPaths += New-FilePathObject -Path "$env:APPDATA\Microsoft\Signatures" -Name "Outlook Signatures" -Type "Folder"
-}
-
-# Add User folder if it exists
-if(Test-Path -Path "$env:SystemDrive\User") {
-    $script:DefaultPaths += New-FilePathObject -Path "$env:SystemDrive\User" -Name "User Directory" -Type "Folder"
-}
-
-# Add Quick Access if it exists
-if(Test-Path -Path "$env:APPDATA\Microsoft\Windows\Recent\AutomaticDestinations\f01b4d95cf55d32a.automaticDestinations-ms") {
-    $script:DefaultPaths += New-FilePathObject -Path "$env:APPDATA\Microsoft\Windows\Recent\AutomaticDestinations\f01b4d95cf55d32a.automaticDestinations-ms" -Name "Quick Access" -Type "File"
-}
-
-# Add Temp folder if it exists
-if(Test-Path -Path "$env:SystemDrive\Temp") {
-    $script:DefaultPaths += New-FilePathObject -Path "$env:SystemDrive\Temp" -Name "Temp Directory" -Type "Folder"
-}
-
-# Add Sticky Notes data file (older version) if it exists
-if(Test-Path -Path "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt") {
-    $script:DefaultPaths += New-FilePathObject -Path "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt" -Name "Sticky Notes (Legacy)" -Type "File"
-}
-
-# Add Sticky Notes data file (Windows 10 v1607+) if it exists
-$stickyNotesPath = "$env:LOCALAPPDATA\Packages\Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe\LocalState\plum.sqlite"
-if(Test-Path -Path $stickyNotesPath) {
-    $script:DefaultPaths += New-FilePathObject -Path $stickyNotesPath -Name "Sticky Notes" -Type "File"
-}
-
-# Add Google Earth KML if it exists
-if(Test-Path -Path "$env:APPDATA\google\googleearth\myplaces.kml") {
-    $script:DefaultPaths += New-FilePathObject -Path "$env:APPDATA\google\googleearth\myplaces.kml" -Name "Google Earth Places" -Type "File"
-}
-
-# Add Chrome bookmarks if they exist and are accessible
-$chromePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Bookmarks"
-if (Test-Path $chromePath) {
-    try {
-        Get-Content $chromePath -ErrorAction Stop | Out-Null
-        $script:DefaultPaths += New-FilePathObject -Path $chromePath -Name "Chrome Bookmarks" -Type "File"
-    }
-    catch {
-        Write-Warning "Chrome bookmarks file not accessible"
-    }
-}
-
-# Main Execution
-try {
+# Show mode selection dialog
+function Show-ModeDialog {
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Select Operation"
     $form.Size = New-Object System.Drawing.Size(300,150)
@@ -153,17 +68,315 @@ try {
     $form.AcceptButton = $btnBackup
     $form.CancelButton = $btnRestore
 
-    $script:isBackup = $form.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK
+    $result = $form.ShowDialog()
     $form.Dispose()
     
-    $window = Initialize-MainWindow
-    $window.FindName('lblMode').Content = if ($script:isBackup) { "Mode: Backup" } else { "Mode: Restore" }
-    
-    if ($script:isBackup) {
-        Add-DefaultPaths
+    return ($result -eq [System.Windows.Forms.DialogResult]::OK)
+}
+
+# Show main window
+function Show-MainWindow {
+    param(
+        [bool]$IsBackup
+    )
+
+    try {
+        # Parse XAML
+        $reader = New-Object System.Xml.XmlNodeReader $script:XAML
+        $window = [Windows.Markup.XamlReader]::Load($reader)
+        
+        # Find controls
+        $controls = @{}
+        "txtSaveLoc", "btnBrowse", "btnStart", "lblMode", "lblStatus", "lvwFiles",
+        "btnAddFile", "btnAddFolder", "btnRemove", "chkNetwork", "chkPrinters",
+        "prgProgress", "txtProgress" | ForEach-Object {
+            $controls[$_] = $window.FindName($_)
+        }
+
+        # Set mode and button text
+        $controls.lblMode.Content = if ($IsBackup) { "Mode: Backup" } else { "Mode: Restore" }
+        $controls.btnStart.Content = if ($IsBackup) { "Backup" } else { "Restore" }
+
+        # Set default path
+        $defaultPath = "C:\LocalData"
+        if (-not (Test-Path $defaultPath)) {
+            New-Item -Path $defaultPath -ItemType Directory -Force | Out-Null
+        }
+        $controls.txtSaveLoc.Text = $defaultPath
+
+        # If in restore mode, look for most recent backup
+        if (-not $IsBackup -and (Test-Path $defaultPath)) {
+            $latestBackup = Get-ChildItem -Path $defaultPath -Directory |
+                Where-Object { $_.Name -like "Backup_*" } |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -First 1
+
+            if ($latestBackup) {
+                $controls.txtSaveLoc.Text = $latestBackup.FullName
+                $controls.lvwFiles.Items.Clear()
+                Get-ChildItem -Path $latestBackup.FullName | 
+                    Where-Object { $_.Name -notmatch '^(FileList_.*\.csv|Drives\.csv|Printers\.txt)$' } | 
+                    ForEach-Object {
+                        $controls.lvwFiles.Items.Add([PSCustomObject]@{
+                            Name = $_.Name
+                            Type = if ($_.PSIsContainer) { "Folder" } else { "File" }
+                            Path = $_.FullName
+                        })
+                    }
+            }
+        }
+
+        # Add event handlers
+        $controls.btnBrowse.Add_Click({
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dialog.Description = if ($IsBackup) { "Select location to save backup" } else { "Select backup to restore from" }
+            $dialog.SelectedPath = $controls.txtSaveLoc.Text
+            
+            if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+                $controls.txtSaveLoc.Text = $dialog.SelectedPath
+                
+                # If restoring, load backup contents
+                if (-not $IsBackup) {
+                    $controls.lvwFiles.Items.Clear()
+                    Get-ChildItem -Path $dialog.SelectedPath | 
+                        Where-Object { $_.Name -notmatch '^(FileList_.*\.csv|Drives\.csv|Printers\.txt)$' } | 
+                        ForEach-Object {
+                            $controls.lvwFiles.Items.Add([PSCustomObject]@{
+                                Name = $_.Name
+                                Type = if ($_.PSIsContainer) { "Folder" } else { "File" }
+                                Path = $_.FullName
+                            })
+                        }
+                }
+            }
+        })
+
+        $controls.btnAddFile.Add_Click({
+            $dialog = New-Object System.Windows.Forms.OpenFileDialog
+            $dialog.Multiselect = $true
+            if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+                foreach ($file in $dialog.FileNames) {
+                    $controls.lvwFiles.Items.Add([PSCustomObject]@{
+                        Name = [System.IO.Path]::GetFileName($file)
+                        Type = "File"
+                        Path = $file
+                    })
+                }
+            }
+        })
+
+        $controls.btnAddFolder.Add_Click({
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+                $controls.lvwFiles.Items.Add([PSCustomObject]@{
+                    Name = [System.IO.Path]::GetFileName($dialog.SelectedPath)
+                    Type = "Folder"
+                    Path = $dialog.SelectedPath
+                })
+            }
+        })
+
+        $controls.btnRemove.Add_Click({
+            while ($controls.lvwFiles.SelectedItems.Count -gt 0) {
+                $controls.lvwFiles.Items.Remove($controls.lvwFiles.SelectedItems[0])
+            }
+        })
+
+        $controls.btnStart.Add_Click({
+            if ([string]::IsNullOrEmpty($controls.txtSaveLoc.Text)) {
+                [System.Windows.MessageBox]::Show(
+                    "Please select a location first.",
+                    "Required Field",
+                    [System.Windows.MessageBoxButton]::OK,
+                    [System.Windows.MessageBoxImage]::Warning
+                )
+                return
+            }
+
+            try {
+                $controls.lblStatus.Content = if ($IsBackup) { "Backing up..." } else { "Restoring..." }
+                $backupPath = $controls.txtSaveLoc.Text
+
+                if ($IsBackup) {
+                    $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+                    $backupPath = Join-Path $backupPath "Backup_$timestamp"
+                    New-Item -Path $backupPath -ItemType Directory -Force | Out-Null
+
+                    # Load default backup paths
+                    $controls.lvwFiles.Items.Clear()
+                    $defaultPaths = @(
+                        @{Path = "$env:APPDATA\Microsoft\Signatures"; Name = "Outlook Signatures"; Type = "Folder"}
+                        @{Path = "$env:SystemDrive\User"; Name = "User Directory"; Type = "Folder"}
+                        @{Path = "$env:APPDATA\Microsoft\Windows\Recent\AutomaticDestinations\f01b4d95cf55d32a.automaticDestinations-ms"; Name = "Quick Access"; Type = "File"}
+                        @{Path = "$env:SystemDrive\Temp"; Name = "Temp Directory"; Type = "Folder"}
+                        @{Path = "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt"; Name = "Sticky Notes (Legacy)"; Type = "File"}
+                        @{Path = "$env:LOCALAPPDATA\Packages\Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe\LocalState\plum.sqlite"; Name = "Sticky Notes"; Type = "File"}
+                        @{Path = "$env:APPDATA\google\googleearth\myplaces.kml"; Name = "Google Earth Places"; Type = "File"}
+                    )
+
+                    foreach ($path in $defaultPaths) {
+                        if (Test-Path -Path $path.Path) {
+                            $controls.lvwFiles.Items.Add([PSCustomObject]@{
+                                Path = $path.Path
+                                Name = $path.Name
+                                Type = $path.Type
+                            })
+                        }
+                    }
+
+                    # Add Chrome bookmarks if accessible
+                    $chromePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Bookmarks"
+                    if (Test-Path $chromePath) {
+                        try {
+                            Get-Content $chromePath -ErrorAction Stop | Out-Null
+                            $controls.lvwFiles.Items.Add([PSCustomObject]@{
+                                Path = $chromePath
+                                Name = "Chrome Bookmarks"
+                                Type = "File"
+                            })
+                        } catch {
+                            Write-Warning "Chrome bookmarks file not accessible"
+                        }
+                    }
+                }
+
+                # Count total files
+                $totalFiles = 0
+                foreach ($item in $controls.lvwFiles.Items) {
+                    if ($item.Type -eq "Folder") {
+                        try {
+                            $count = (Get-ChildItem -Path $item.Path -Recurse -File).Count
+                            $totalFiles += $count
+                        } catch {
+                            Write-Warning "Could not access folder $($item.Path): $($_.Exception.Message)"
+                        }
+                    } else {
+                        $totalFiles++
+                    }
+                }
+                
+                if ($controls.chkNetwork.IsChecked) { $totalFiles++ }
+                if ($controls.chkPrinters.IsChecked) { $totalFiles++ }
+                
+                $controls.prgProgress.Maximum = $totalFiles
+                $controls.prgProgress.Value = 0
+
+                # Process files
+                foreach ($item in $controls.lvwFiles.Items) {
+                    try {
+                        $controls.txtProgress.Text = "Processing: $($item.Name)"
+                        
+                        if ($IsBackup) {
+                            $dest = Join-Path $backupPath $item.Name
+                            if ($item.Type -eq "Folder") {
+                                Get-ChildItem -Path $item.Path -Recurse -File | ForEach-Object {
+                                    $relativePath = $_.FullName.Substring($item.Path.Length)
+                                    $targetPath = Join-Path $dest $relativePath
+                                    $targetDir = [System.IO.Path]::GetDirectoryName($targetPath)
+                                    
+                                    if (-not (Test-Path $targetDir)) {
+                                        New-Item -Path $targetDir -ItemType Directory -Force | Out-Null
+                                    }
+                                    
+                                    Copy-Item -Path $_.FullName -Destination $targetPath -Force
+                                    $controls.prgProgress.Value++
+                                    $controls.txtProgress.Text = "Processing: $($_.Name)"
+                                }
+                            } else {
+                                Copy-Item -Path $item.Path -Destination $dest -Force
+                                $controls.prgProgress.Value++
+                            }
+                        } else {
+                            $targetPath = Join-Path $env:USERPROFILE $item.Name
+                            Copy-Item -Path $item.Path -Destination $targetPath -Recurse -Force
+                            $controls.prgProgress.Value++
+                        }
+                    } catch {
+                        Write-Warning "Failed to process $($item.Name): $($_.Exception.Message)"
+                    }
+                }
+
+                # Process network drives
+                if ($controls.chkNetwork.IsChecked) {
+                    $controls.txtProgress.Text = "Processing network drives..."
+                    if ($IsBackup) {
+                        Get-WmiObject -Class Win32_MappedLogicalDisk | 
+                            Select-Object Name, ProviderName |
+                            Export-Csv -Path (Join-Path $backupPath "Drives.csv") -NoTypeInformation
+                    } else {
+                        $drivesPath = Join-Path $backupPath "Drives.csv"
+                        if (Test-Path $drivesPath) {
+                            Import-Csv $drivesPath | ForEach-Object {
+                                $driveExists = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DeviceID -eq $_.Name }
+                                if (-not $driveExists) {
+                                    New-PSDrive -Name $_.Name.Substring(0,1) -PSProvider FileSystem -Root $_.ProviderName -Persist
+                                }
+                            }
+                        }
+                    }
+                    $controls.prgProgress.Value++
+                }
+
+                # Process printers
+                if ($controls.chkPrinters.IsChecked) {
+                    $controls.txtProgress.Text = "Processing printers..."
+                    if ($IsBackup) {
+                        Get-WmiObject -Class Win32_Printer | 
+                            Where-Object { -not $_.Local } |
+                            Select-Object -ExpandProperty Name |
+                            Set-Content -Path (Join-Path $backupPath "Printers.txt")
+                    } else {
+                        $printersPath = Join-Path $backupPath "Printers.txt"
+                        if (Test-Path $printersPath) {
+                            Get-Content $printersPath | ForEach-Object {
+                                Add-Printer -ConnectionName $_
+                            }
+                        }
+                    }
+                    $controls.prgProgress.Value++
+                }
+                
+                $controls.txtProgress.Text = "Operation completed successfully"
+                $controls.prgProgress.Value = $controls.prgProgress.Maximum
+                
+                [System.Windows.MessageBox]::Show(
+                    $(if ($IsBackup) { "Backup completed successfully!" } else { "Restore completed successfully!" }),
+                    "Success",
+                    [System.Windows.MessageBoxButton]::OK,
+                    [System.Windows.MessageBoxImage]::Information
+                )
+                
+                $controls.lblStatus.Content = "Operation completed successfully"
+            }
+            catch {
+                $controls.txtProgress.Text = "Operation failed"
+                $controls.lblStatus.Content = "Operation failed"
+                [System.Windows.MessageBox]::Show(
+                    "Operation failed: $($_.Exception.Message)",
+                    "Error",
+                    [System.Windows.MessageBoxButton]::OK,
+                    [System.Windows.MessageBoxImage]::Error
+                )
+            }
+        })
+
+        $window.ShowDialog() | Out-Null
     }
-    
-    $window.ShowDialog() | Out-Null
+    catch {
+        Write-Error $_.Exception.Message
+        [System.Windows.MessageBox]::Show(
+            "An error occurred: $($_.Exception.Message)",
+            "Error",
+            [System.Windows.MessageBoxButton]::OK,
+            [System.Windows.MessageBoxImage]::Error
+        )
+    }
+}
+
+# Main execution
+try {
+    $script:isBackup = Show-ModeDialog
+    Show-MainWindow -IsBackup $script:isBackup
 }
 catch {
     Write-Error $_.Exception.Message
