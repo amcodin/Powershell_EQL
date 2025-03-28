@@ -7,6 +7,12 @@ function Start-ConfigManagerActions {
 
     try {
         Write-Verbose "Initiating Configuration Manager actions"
+
+        # Check if CM client exists
+        if (-not (Test-Path "C:\Windows\CCM\ccmexec.exe")) {
+            Write-Warning "Configuration Manager client not installed - skipping CM actions"
+            return $true  # Return success to not block restore process
+        }
         
         if ($UseModule) {
             # Try using Configuration Manager module

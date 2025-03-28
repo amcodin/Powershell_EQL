@@ -1,4 +1,4 @@
-﻿#requires -Version 3.0
+﻿﻿﻿﻿﻿﻿#requires -Version 3.0
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -75,8 +75,50 @@ function Show-ModeDialog {
 
     $result = $form.ShowDialog()
     $form.Dispose()
+
+    # Store dialog result as boolean
+    $isBackupMode = ($result -eq [System.Windows.Forms.DialogResult]::OK)
+
+    # If restore mode, run updates
+    if (-not $isBackupMode) {
+        # Restore mode selected - trigger updates immediately
+        $updateForm = New-Object System.Windows.Forms.Form
+        $updateForm.Text = "Initializing Restore"
+        $updateForm.Size = New-Object System.Drawing.Size(400,150)
+        $updateForm.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+        $updateForm.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+        $updateForm.MaximizeBox = $false
+        $updateForm.MinimizeBox = $false
+
+        $label = New-Object System.Windows.Forms.Label
+        $label.Location = New-Object System.Drawing.Point(10,20)
+        $label.Size = New-Object System.Drawing.Size(360,40)
+        $label.Text = "Running system updates (GPUpdate and Configuration Manager)...`nThis may take a few moments."
+        $updateForm.Controls.Add($label)
+
+        $progressBar = New-Object System.Windows.Forms.ProgressBar
+        $progressBar.Location = New-Object System.Drawing.Point(10,70)
+        $progressBar.Size = New-Object System.Drawing.Size(360,20)
+        $progressBar.Style = [System.Windows.Forms.ProgressBarStyle]::Marquee
+        $updateForm.Controls.Add($progressBar)
+
+        # Show form without blocking
+        $updateForm.Show()
+        $updateForm.Refresh()
+
+        # Run updates and capture+discard all output
+        $null = Set-GPupdate *>$null
+        $null = Start-ConfigManagerActions *>$null
+
+        # Add a small delay to ensure updates are initiated
+        Start-Sleep -Seconds 2
+
+        # Close update form
+        $updateForm.Close()
+        $updateForm.Dispose()
+    }
     
-    return ($result -eq [System.Windows.Forms.DialogResult]::OK)
+    return $isBackupMode
 }
 
 # Show main window
@@ -288,11 +330,8 @@ function Show-MainWindow {
                                 $controls.prgProgress.Value++
                             }
                         } else {
-                            # Read CSV and restore files to original locations
-                            Set-GPupdate
-                            Start-ConfigManagerActions
+                            # Updates already run at restore mode selection
                             $csvPath = Join-Path $backupPath "FileList_Backup.csv"
-
                             if (Test-Path $csvPath) {
                                 $backupFiles = Import-Csv $csvPath
                                 foreach ($file in $backupFiles) {
@@ -407,7 +446,13 @@ function Show-MainWindow {
 
 # Main execution
 try {
-    $script:isBackup = Show-ModeDialog
+    # Store result in boolean variable and ensure no output leaks
+    [bool]$script:isBackup = [bool](Show-ModeDialog 2>&1 *>$null)
+    
+    if ($null -eq $script:isBackup) {
+        $script:isBackup = $false
+    }
+
     Show-MainWindow -IsBackup $script:isBackup
 }
 catch {

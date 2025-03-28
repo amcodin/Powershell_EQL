@@ -173,9 +173,7 @@ function Initialize-MainWindow {
                     $script:lvwFiles.Items.Add($path)
                 }
             } else {
-                # For restore, run updates first
-                Set-GPupdate
-                Start-ConfigManagerActions
+                # For restore
             }
 
             # Count total files for progress bar
