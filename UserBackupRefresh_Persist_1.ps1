@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿#requires -Version 3.0
+﻿﻿#requires -Version 3.0
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 

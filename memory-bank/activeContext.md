@@ -33,6 +33,7 @@ Core functionality implementation complete with modular approach, focusing on ne
    - Certificate management implementation
    - Service handling enhancements
    - Status update improvements
+   - Add more verbose logging to powershell terminal as script is running
 
 2. Testing Requirements:
    - Full integration testing needed
