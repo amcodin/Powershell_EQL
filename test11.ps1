@@ -409,7 +409,7 @@ function Get-BackupPaths {
     return $result
 }
 
-function Get-BAUPaths {
+function Get-UserPaths {
     [CmdletBinding()]
     param ()
     $specificPaths = @( 
@@ -518,7 +518,7 @@ function Show-MainWindow {
         <Label Name="lblMode" Content="" Margin="500,10,10,0" HorizontalAlignment="Right" VerticalAlignment="Top" FontWeight="Bold"/>
         <Label Name="lblFreeSpace" Content="Free Space: -" Margin="500,40,10,0" HorizontalAlignment="Right" VerticalAlignment="Top"/>
         <Label Name="lblRequiredSpace" Content="Required Space: -" Margin="500,65,10,0" HorizontalAlignment="Right" VerticalAlignment="Top"/>
-        <Label Name="lblStatus" Content="Ready" Margin="10,0,10,10" HorizontalAlignment="Left" VerticalAlignment="Bottom" FontStyle="Italic"/>
+        <Label Name="lblStatus" Content="Ready" Margin="10,0,10,10" HorizontalAlignment="Center" VerticalAlignment="Bottom" FontStyle="Italic"/>
         <Label Content="Files/Folders to Process:" Margin="10,90,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"/>
         <ListView Name="lvwFiles" Margin="10,120,200,140" SelectionMode="Extended">
              <ListView.View>
@@ -771,7 +771,7 @@ function Show-MainWindow {
         $controls.btnAddBAUPaths.Add_Click({
             Write-Host "Add BAU Paths button clicked."
             if (-not $IsBackup) { Write-Warning "Add BAU Paths button disabled in Restore mode."; return }
-            $bauPaths = $null; try { $bauPaths = Get-BAUPaths } catch { Write-Error "Error calling Get-BAUPaths: $($_.Exception.Message)"; [System.Windows.MessageBox]::Show("Error retrieving user folders: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error); return }
+            $bauPaths = $null; try { $bauPaths = Get-UserPaths } catch { Write-Error "Error calling Get-UserPaths: $($_.Exception.Message)"; [System.Windows.MessageBox]::Show("Error retrieving user folders: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error); return }
             if ($bauPaths -ne $null -and $bauPaths.Count -gt 0) {
                 $currentItems = $controls.lvwFiles.ItemsSource
                 $newItemsList = [System.Collections.Generic.List[PSCustomObject]]::new()
@@ -789,7 +789,7 @@ function Show-MainWindow {
                 }
                 if ($addedCount -gt 0) { $controls.lvwFiles.ItemsSource = $newItemsList; Write-Host "Added $addedCount new BAU path(s)."; & $script:UpdateRequiredSpaceLabel -ControlsParam $controls }
                 else { Write-Host "No new BAU paths added."; [System.Windows.MessageBox]::Show("No new user folders added.", "Info", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) }
-            } else { Write-Host "Get-BAUPaths returned no valid paths."; [System.Windows.MessageBox]::Show("Could not find standard user folders.", "Info", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) }
+            } else { Write-Host "Get-UserPaths returned no valid paths."; [System.Windows.MessageBox]::Show("Could not find standard user folders.", "Info", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) }
         })
         # btnRemove Handler
         $controls.btnRemove.Add_Click({
@@ -1054,7 +1054,7 @@ try {
                 $itemsToBackup = [System.Collections.Generic.List[PSCustomObject]]::new()
                 try { Get-BackupPaths | ForEach-Object { $itemsToBackup.Add($_) } } catch { Write-Warning "Error getting default backup paths: $($_.Exception.Message)"}
                 # Davids BAU folders
-                #try { Get-BAUPaths | ForEach-Object { $itemsToBackup.Add($_) } } catch { Write-Warning "Error getting BAU paths: $($_.Exception.Message)"}
+                #try { Get-UserPaths | ForEach-Object { $itemsToBackup.Add($_) } } catch { Write-Warning "Error getting BAU paths: $($_.Exception.Message)"}
 
                 # Add IsSelected property (assume all true for Express)
                 $itemsToBackupFinal = $itemsToBackup | ForEach-Object { $_ | Add-Member -MemberType NoteProperty -Name 'IsSelected' -Value $true -PassThru }
