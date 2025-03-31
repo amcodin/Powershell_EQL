@@ -27,14 +27,13 @@ function Get-BackupPaths {
     # Define specific paths/files to check
     $specificPaths = @(
         "$env:APPDATA\Microsoft\Signatures",
-        "$env:SystemDrive\User", # Check if this generic path is truly needed/valid
         "$env:APPDATA\Microsoft\Windows\Recent\AutomaticDestinations\f01b4d95cf55d32a.automaticDestinations-ms", # Quick Access Pinned
-        "$env:SystemDrive\Temp",
         "$env:APPDATA\Microsoft\Sticky Notes\StickyNotes.snt", # Legacy Sticky Notes
         "$env:LOCALAPPDATA\Packages\Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe\LocalState\plum.sqlite", # Modern Sticky Notes
         "$env:APPDATA\google\googleearth\myplaces.kml", # Google Earth Places
         "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Bookmarks", # Chrome Bookmarks
         "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Bookmarks" # Edge Bookmarks
+
         # Add other common paths as needed
     )
 
