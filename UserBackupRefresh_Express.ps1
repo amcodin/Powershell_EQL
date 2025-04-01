@@ -1,14 +1,14 @@
 ##############################################################################################################################
 #        Client Data Backup Tool         											#
-#       Written By Jared Vosters - ACT Logistics, github.com/cattboy        		#
+#       Written By Jared Vosters - github.com/cattboy        		#
 # Based off the script by Stephen Onions & Kevin King UserBackupRefresh_Persist 1	#
 #
 # This Powershell script runs locally only, has 3 prompts. EXPRESS, BACKUP, RESTORE
 # 
 # Express - No gui, fully automated
-# Looks for a backupfolder in C:/localdata with todays date.
+# Looks for a backupfolder in C:/localdata with todays date. (Folder can be created by the Backup prompt)
 # If found, it will automatically restore files from backup folder to desginated locations, defined in FileList_Backup.csv
-# If no backup folder is found, create backup folder with all options checked
+# If no backup folder is found, create backup folder with all options checked (similar to pressing Restore prompt)
 #
 # Backup - GUI interface
 # Select folders/files to backup, backup location, etc
