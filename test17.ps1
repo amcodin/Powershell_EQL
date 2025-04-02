@@ -25,7 +25,7 @@ $script:pathTemplates = @{
     # TempFolder        = "C:\Temp" # System-wide, not user-specific usually. Consider if needed.
     StickyNotesLegacy = "{USERPROFILE}\AppData\Roaming\Microsoft\Sticky Notes\StickyNotes.snt"
     StickyNotesModernDB = "{USERPROFILE}\AppData\Local\Packages\Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe\LocalState\plum.sqlite"
-    GoogleEarthPlaces = "{USERPROFILE}\AppData\Roaming\google\googleearth\myplaces.kml" # Corrected path might be LocalLow
+    GoogleEarthPlaces = "{USERPROFILE}\AppData\LocalLow\Google\GoogleEarth\myplaces.kml" # Corrected path to LocalLow
     ChromeBookmarks   = "{USERPROFILE}\AppData\Local\Google\Chrome\User Data\Default\Bookmarks"
     EdgeBookmarks     = "{USERPROFILE}\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks"
     # Add more templates here
@@ -54,7 +54,8 @@ function Resolve-UserPathTemplates {
     foreach ($key in $Templates.Keys) {
         $template = $Templates[$key]
         # Replace placeholder with the actual profile path
-        $resolvedPath = $template -replace '\{USERPROFILE\}', $UserProfilePath.TrimEnd('\')
+        # Use -replace with regex escape for backslashes in path if needed, but direct replace often works here.
+        $resolvedPath = $template.Replace('{USERPROFILE}', $UserProfilePath.TrimEnd('\'))
 
         # Check if the resolved path exists
         if (Test-Path -LiteralPath $resolvedPath -ErrorAction SilentlyContinue) {
@@ -432,7 +433,7 @@ function Show-MainWindow {
                         Where-Object { $_.Name -notmatch '^(FileList_.*\.csv|Drives\.csv|Printers\.txt|TransferLog\.csv)$' } | # Exclude logs
                         ForEach-Object {
                             [PSCustomObject]@{
-                                Name = $_.Name
+                                Name = $_.Name # In restore, Name should represent the SourceKey for selection
                                 Type = if ($_.PSIsContainer) { "Folder" } else { "File" }
                                 Path = $_.FullName # Path within the backup folder
                                 IsSelected = $true # Default to selected for restore
@@ -494,19 +495,23 @@ function Show-MainWindow {
                     $newItemsList = [System.Collections.Generic.List[PSCustomObject]]::new() # Clear list first
                     if (Test-Path -Path $logFilePath) {
                          Write-Host "Log file found. Populating ListView."
+                         # In restore, list items represent the *backed up* items/folders (named by SourceKey)
+                         # We need to derive this from the log or the folder structure within the backup
+                         # Let's list the top-level items in the backup dir (excluding logs)
                          $backupItems = Get-ChildItem -Path $selectedPath |
-                            Where-Object { $_.Name -notmatch '^(FileList_.*\.csv|Drives\.csv|Printers\.txt|TransferLog\.csv)$' } |
+                            Where-Object { $_.PSIsContainer -or $_.Name -match '^(Drives\.csv|Printers\.txt)$' } | # List folders or known settings files
+                            Where-Object { $_.Name -notmatch '^(FileList_.*\.csv|TransferLog\.csv)$' } | # Exclude logs
                             ForEach-Object {
                                 [PSCustomObject]@{
-                                    Name = $_.Name
-                                    Type = if ($_.PSIsContainer) { "Folder" } else { "File" }
+                                    Name = $_.Name # Name represents the SourceKey or setting type
+                                    Type = if ($_.PSIsContainer) { "Folder" } else { "Setting" }
                                     Path = $_.FullName
                                     IsSelected = $true # Default to selected
                                 }
                             }
                         $backupItems | ForEach-Object { $newItemsList.Add($_) }
                         $controls.lblStatus.Content = "Ready to restore from: $selectedPath"
-                        Write-Host "ListView updated with $($newItemsList.Count) items from selected backup."
+                        Write-Host "ListView updated with $($newItemsList.Count) items/categories from selected backup."
                     } else {
                          Write-Warning "Selected folder is not a valid backup (missing FileList_Backup.csv)."
                          $controls.lblStatus.Content = "Selected folder is not a valid backup (missing FileList_Backup.csv)."
@@ -546,12 +551,13 @@ function Show-MainWindow {
                     # Check if path already exists in the list
                     if (-not ($currentItems.Path -contains $file)) {
                         Write-Host "Adding file: $file"
+                        $fileKey = "ManualFile_" + ([System.IO.Path]::GetFileNameWithoutExtension($file) -replace '[^a-zA-Z0-9_]','_')
                         $currentItems.Add([PSCustomObject]@{
-                            Name = [System.IO.Path]::GetFileName($file)
+                            Name = $fileKey # Use a generated key for Name/SourceKey
                             Type = "File"
                             Path = $file
                             IsSelected = $true
-                            SourceKey = "ManualAdd" # Indicate manually added
+                            SourceKey = $fileKey
                         })
                         $addedCount++
                     } else { Write-Host "Skipping duplicate file: $file"}
@@ -587,12 +593,13 @@ function Show-MainWindow {
 
                  if (-not ($currentItems.Path -contains $selectedPath)) {
                     Write-Host "Adding folder: $selectedPath"
+                    $folderKey = "ManualFolder_" + ([System.IO.Path]::GetFileName($selectedPath) -replace '[^a-zA-Z0-9_]','_')
                     $currentItems.Add([PSCustomObject]@{
-                        Name = [System.IO.Path]::GetFileName($selectedPath)
+                        Name = $folderKey # Use a generated key for Name/SourceKey
                         Type = "Folder"
                         Path = $selectedPath
                         IsSelected = $true
-                        SourceKey = "ManualAdd" # Indicate manually added
+                        SourceKey = $folderKey
                     })
                     $controls.lvwFiles.Items.Refresh() # Refresh the view
                     Write-Host "Updated ListView ItemsSource with new folder."
@@ -712,13 +719,15 @@ function Show-MainWindow {
                         if ($item.Type -eq "Folder") {
                             Write-Host "  Item is a folder. Processing recursively..."
                             try {
+                                # Get source folder info once
+                                $sourceFolderInfo = Get-Item -LiteralPath $sourcePath
+
                                 Get-ChildItem -Path $sourcePath -Recurse -File -Force -ErrorAction Stop | ForEach-Object {
                                     $originalFileFullPath = $_.FullName
-                                    # Calculate path relative to the *parent* of the source folder for correct structure
-                                    $sourceFolderParent = Split-Path $sourcePath -Parent
-                                    $relativeFilePath = $originalFileFullPath.Substring($sourceFolderParent.Length).TrimStart('\')
-                                    # Backup path uses the sanitized SourceKey as the root for this item
-                                    $backupRelativePath = $relativeFilePath # Use full relative path including the folder name derived from sourceKey
+                                    # Calculate path relative to the *source folder itself*
+                                    $relativeFilePath = $originalFileFullPath.Substring($sourceFolderInfo.FullName.Length).TrimStart('\')
+                                    # Backup path uses the sanitized SourceKey as the root, then the relative path
+                                    $backupRelativePath = Join-Path $backupItemRootName $relativeFilePath
 
                                     $targetBackupPath = Join-Path $backupRootPath $backupRelativePath
                                     $targetBackupDir = Split-Path $targetBackupPath -Parent
@@ -739,7 +748,7 @@ function Show-MainWindow {
                                 Write-Host "  Finished processing folder: $($item.Name)"
                             } catch {
                                  Write-Warning "Error processing folder '$($item.Name)' ($sourcePath): $($_.Exception.Message)"
-                                 "`"$sourcePath`",`"ERROR_FOLDER_COPY: $($_.Exception.Message)`",`"$sourceKey`"" | Add-Content -Path $csvLogPath -Encoding UTF8
+                                 "`"$sourcePath`",`"ERROR_FOLDER_COPY: $($_.Exception.Message -replace '"', '""')`",`"$sourceKey`"" | Add-Content -Path $csvLogPath -Encoding UTF8
                             }
                         } else { # Single File
                              Write-Host "  Item is a file. Processing..."
@@ -764,7 +773,7 @@ function Show-MainWindow {
                                 $controls.txtProgress.Text = "Backed up: $($item.Name)"
                              } catch {
                                  Write-Warning "Error processing file '$($item.Name)' ($sourcePath): $($_.Exception.Message)"
-                                 "`"$sourcePath`",`"ERROR_FILE_COPY: $($_.Exception.Message)`",`"$sourceKey`"" | Add-Content -Path $csvLogPath -Encoding UTF8
+                                 "`"$sourcePath`",`"ERROR_FILE_COPY: $($_.Exception.Message -replace '"', '""')`",`"$sourceKey`"" | Add-Content -Path $csvLogPath -Encoding UTF8
                              }
                         }
                     } # End foreach item
@@ -791,7 +800,7 @@ function Show-MainWindow {
                         Write-Host "Processing Printers backup..."
                         $controls.txtProgress.Text = "Backing up printers..."
                         try {
-                            Get-WmiObject -Class Win32_Printer -Filter "Local = False" -ErrorAction Stop |
+                            Get-WmiObject -Class Win32_Printer -Filter "Local = False AND Network = True" -ErrorAction Stop | # Added Network=True filter
                                 Select-Object -ExpandProperty Name |
                                 Set-Content -Path (Join-Path $backupRootPath "Printers.txt") -Encoding UTF8 -ErrorAction Stop
                              $filesProcessed++
@@ -844,36 +853,32 @@ function Show-MainWindow {
                     if (-not $selectedItemsFromListView) {
                         throw "No items selected (checked) in the list for restore."
                     }
-                    # Get the NAMES of the selected items (which correspond to SourceKey in backup)
-                    $selectedSourceKeys = $selectedItemsFromListView | Select-Object -ExpandProperty Name
-                    Write-Host "Found $($selectedItemsFromListView.Count) CHECKED items in ListView for restore (based on SourceKey/Name): $($selectedSourceKeys -join ', ')"
+                    # Get the NAMES of the selected items (which correspond to SourceKey in backup or setting file names)
+                    $selectedKeysOrFiles = $selectedItemsFromListView | Select-Object -ExpandProperty Name
+                    Write-Host "Found $($selectedItemsFromListView.Count) CHECKED items/categories in ListView for restore: $($selectedKeysOrFiles -join ', ')"
 
                     # --- Filter Log Entries Based on Selection ---
                     Write-Host "Filtering log entries based on ListView selection (matching SourceKey)..."
                     # Ensure the log has the SourceKey column
                     if (-not ($backupLog | Get-Member -Name SourceKey)) {
-                        throw "Backup log '$csvLogPath' is missing the required 'SourceKey' column. Cannot perform selective restore."
+                        throw "Backup log '$csvLogPath' is missing the required 'SourceKey' column. Cannot perform selective restore of files/folders."
                     }
                     $logEntriesToRestore = $backupLog | Where-Object {
-                        $_.SourceKey -in $selectedSourceKeys -and
+                        $_.SourceKey -in $selectedKeysOrFiles -and
                         $_.BackupRelativePath -notmatch '^(SKIPPED|ERROR)_' # Exclude skipped/error entries
                     }
 
                     if (-not $logEntriesToRestore) {
-                        # Check if the log contains *any* entries for the selected keys
-                        $potentialMatches = $backupLog | Where-Object { $_.SourceKey -in $selectedSourceKeys }
-                        if ($potentialMatches) {
-                            throw "Selected items correspond to entries in the log, but they were all marked as SKIPPED or ERROR during backup. Nothing valid to restore for this selection."
-                        } else {
-                            throw "None of the selected (checked) items correspond to valid entries in the backup log."
-                        }
+                        Write-Warning "No file/folder entries found in the log matching the selected items. Only settings might be restored if selected."
+                    } else {
+                        Write-Host "Filtered log. $($logEntriesToRestore.Count) file/folder log entries will be processed for restore."
                     }
-                    Write-Host "Filtered log. $($logEntriesToRestore.Count) log entries will be processed for restore."
 
-                    # Estimate progress based on selected log entries
+
+                    # Estimate progress based on selected log entries AND selected settings
                     $totalFilesEstimate = $logEntriesToRestore.Count
-                    if ($controls.chkNetwork.IsChecked) { $totalFilesEstimate++ }
-                    if ($controls.chkPrinters.IsChecked) { $totalFilesEstimate++ }
+                    if ($controls.chkNetwork.IsChecked -and ($selectedKeysOrFiles -contains "Drives.csv")) { $totalFilesEstimate++ }
+                    if ($controls.chkPrinters.IsChecked -and ($selectedKeysOrFiles -contains "Printers.txt")) { $totalFilesEstimate++ }
                     Write-Host "Estimated total items for restore progress: $totalFilesEstimate"
 
                     $controls.prgProgress.Maximum = if($totalFilesEstimate -gt 0) { $totalFilesEstimate } else { 1 }
@@ -882,40 +887,45 @@ function Show-MainWindow {
                     $filesProcessed = 0
 
                     # Restore Files/Folders from Filtered Log
-                    Write-Host "Starting restore of files/folders from filtered log..."
-                    foreach ($entry in $logEntriesToRestore) {
-                        $originalFileFullPath = $entry.OriginalFullPath
-                        $backupRelativePath = $entry.BackupRelativePath
-                        $sourceBackupPath = Join-Path $backupRootPath $backupRelativePath
+                    if($logEntriesToRestore.Count -gt 0) {
+                        Write-Host "Starting restore of files/folders from filtered log..."
+                        foreach ($entry in $logEntriesToRestore) {
+                            $originalFileFullPath = $entry.OriginalFullPath
+                            $backupRelativePath = $entry.BackupRelativePath
+                            $sourceBackupPath = Join-Path $backupRootPath $backupRelativePath
 
-                        Write-Host "Processing restore entry: Source='$sourceBackupPath', Target='$originalFileFullPath'"
-                        $controls.txtProgress.Text = "Restoring: $(Split-Path $originalFileFullPath -Leaf)"
+                            Write-Host "Processing restore entry: Source='$sourceBackupPath', Target='$originalFileFullPath'"
+                            $controls.txtProgress.Text = "Restoring: $(Split-Path $originalFileFullPath -Leaf)"
 
-                        if (Test-Path -LiteralPath $sourceBackupPath -PathType Leaf) { # Ensure source exists in backup
-                            try {
-                                $targetRestoreDir = Split-Path $originalFileFullPath -Parent
-                                if (-not (Test-Path $targetRestoreDir)) {
-                                    Write-Host "  Creating target directory: $targetRestoreDir"
-                                    New-Item -Path $targetRestoreDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+                            if (Test-Path -LiteralPath $sourceBackupPath -PathType Leaf) { # Ensure source exists in backup
+                                try {
+                                    $targetRestoreDir = Split-Path $originalFileFullPath -Parent
+                                    if (-not (Test-Path $targetRestoreDir)) {
+                                        Write-Host "  Creating target directory: $targetRestoreDir"
+                                        New-Item -Path $targetRestoreDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+                                    }
+
+                                    Write-Host "  Copying '$sourceBackupPath' to '$originalFileFullPath'"
+                                    Copy-Item -Path $sourceBackupPath -Destination $originalFileFullPath -Force -ErrorAction Stop
+
+                                    $filesProcessed++
+                                    if ($filesProcessed -le $controls.prgProgress.Maximum) { $controls.prgProgress.Value = $filesProcessed }
+
+                                } catch {
+                                    Write-Warning "Failed to restore '$originalFileFullPath' from '$sourceBackupPath': $($_.Exception.Message)"
                                 }
-
-                                Write-Host "  Copying '$sourceBackupPath' to '$originalFileFullPath'"
-                                Copy-Item -Path $sourceBackupPath -Destination $originalFileFullPath -Force -ErrorAction Stop
-
-                                $filesProcessed++
-                                if ($filesProcessed -le $controls.prgProgress.Maximum) { $controls.prgProgress.Value = $filesProcessed }
-
-                            } catch {
-                                Write-Warning "Failed to restore '$originalFileFullPath' from '$sourceBackupPath': $($_.Exception.Message)"
+                            } else {
+                                Write-Warning "Source file not found in backup, skipping restore: $sourceBackupPath (Expected for: $originalFileFullPath)"
                             }
-                        } else {
-                            Write-Warning "Source file not found in backup, skipping restore: $sourceBackupPath (Expected for: $originalFileFullPath)"
-                        }
-                    } # End foreach entry
-                    Write-Host "Finished restoring files/folders from log."
+                        } # End foreach entry
+                        Write-Host "Finished restoring files/folders from log."
+                    } else {
+                        Write-Host "Skipping file/folder restore as no matching log entries were found for selected items."
+                    }
 
-                    # Restore Network Drives (Not dependent on ListView selection)
-                    if ($controls.chkNetwork.IsChecked) {
+
+                    # Restore Network Drives (Only if checkbox checked AND "Drives.csv" was selected in list)
+                    if ($controls.chkNetwork.IsChecked -and ($selectedKeysOrFiles -contains "Drives.csv")) {
                         Write-Host "Processing Network Drives restore..."
                         $controls.txtProgress.Text = "Restoring network drives..."
                         $drivesCsvPath = Join-Path $backupRootPath "Drives.csv"
@@ -947,11 +957,11 @@ function Show-MainWindow {
                             } catch {
                                  Write-Warning "Error processing network drive restorations: $($_.Exception.Message)"
                             }
-                        } else { Write-Warning "Network drives backup file (Drives.csv) not found." }
-                    } else { Write-Host "Skipping Network Drives restore (unchecked)."}
+                        } else { Write-Warning "Network drives backup file (Drives.csv) not found in backup, although selected." }
+                    } else { Write-Host "Skipping Network Drives restore (unchecked or Drives.csv not selected)."}
 
-                    # Restore Printers (Not dependent on ListView selection)
-                    if ($controls.chkPrinters.IsChecked) {
+                    # Restore Printers (Only if checkbox checked AND "Printers.txt" was selected in list)
+                    if ($controls.chkPrinters.IsChecked -and ($selectedKeysOrFiles -contains "Printers.txt")) {
                         Write-Host "Processing Printers restore..."
                         $controls.txtProgress.Text = "Restoring printers..."
                         $printersTxtPath = Join-Path $backupRootPath "Printers.txt"
@@ -977,8 +987,8 @@ function Show-MainWindow {
                             } catch {
                                  Write-Warning "Error processing printer restorations: $($_.Exception.Message)"
                             }
-                        } else { Write-Warning "Printers backup file (Printers.txt) not found." }
-                    } else { Write-Host "Skipping Printers restore (unchecked)."}
+                        } else { Write-Warning "Printers backup file (Printers.txt) not found in backup, although selected." }
+                    } else { Write-Host "Skipping Printers restore (unchecked or Printers.txt not selected)."}
 
                     $controls.txtProgress.Text = "Restore completed from: $backupRootPath"
                     if ($controls.prgProgress.Maximum -gt 0) {
@@ -1047,10 +1057,14 @@ function Execute-ExpressModeLogic {
     $transferSuccess = $true # Assume success initially
     $transferLog = [System.Collections.Generic.List[string]]::new()
     $transferLog.Add("Timestamp,Action,Status,Details")
+    $logFilePath = $null # Initialize log file path variable
+    $tempLogPath = $null # Initialize temp log file path variable
 
     Function LogTransfer ($Action, $Status, $Details) {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        $logEntry = """$timestamp"",""$Action"",""$Status"",""$Details"""
+        # Escape double quotes in details for CSV compatibility
+        $safeDetails = $Details -replace '"', '""'
+        $logEntry = """$timestamp"",""$Action"",""$Status"",""$safeDetails"""
         $script:transferLog.Add($logEntry)
         Write-Host "LOG: $Action - $Status - $Details"
     }
@@ -1068,7 +1082,7 @@ function Execute-ExpressModeLogic {
         Write-Host "Attempting to map $uncPath to $mappedDriveLetter`: " -NoNewline
         LogTransfer "Map Drive" "Attempt" "Mapping $uncPath to $mappedDriveLetter`:"
 
-        # Remove existing drive if it exists (less likely needed with specific letter)
+        # Remove existing drive if it exists
         if (Test-Path "${mappedDriveLetter}:") {
             Write-Warning "Drive $mappedDriveLetter`: already exists. Attempting to remove..."
             Remove-PSDrive -Name $mappedDriveLetter -Force -ErrorAction SilentlyContinue
@@ -1083,12 +1097,14 @@ function Execute-ExpressModeLogic {
         LogTransfer "Get Remote User" "Attempt" "Querying Win32_ComputerSystem on $targetDevice"
         $remoteUsername = $null
         try {
-            # Use the provided credential's context implicitly if needed, or specify explicitly if Invoke-Command is required
-            # Get-CimInstance often works well across domain/trusted hosts without explicit Invoke-Command
-            $compInfo = Get-CimInstance -ClassName Win32_ComputerSystem -ComputerName $targetDevice -ErrorAction Stop
-            if ($compInfo -and -not [string]::IsNullOrWhiteSpace($compInfo.UserName)) {
+            # Use Invoke-Command for reliability, especially across different network/domain setups
+            $remoteResult = Invoke-Command -ComputerName $targetDevice -Credential $Credential -ScriptBlock {
+                (Get-CimInstance -ClassName Win32_ComputerSystem).UserName
+            } -ErrorAction Stop
+
+            if ($remoteResult -and -not [string]::IsNullOrWhiteSpace($remoteResult)) {
                 # Username might be in DOMAIN\User format, we only want the user part
-                $remoteUsername = ($compInfo.UserName -split '\\')[-1]
+                $remoteUsername = ($remoteResult -split '\\')[-1]
                 Write-Host "Identified remote user: '$remoteUsername'" -ForegroundColor Green
                 LogTransfer "Get Remote User" "Success" "Identified remote user: $remoteUsername"
             } else {
@@ -1096,7 +1112,7 @@ function Execute-ExpressModeLogic {
             }
         } catch {
             Write-Warning "Failed to automatically identify remote user via Win32_ComputerSystem: $($_.Exception.Message)"
-            LogTransfer "Get Remote User" "Warning" "Failed to get user via WMI: $($_.Exception.Message)"
+            LogTransfer "Get Remote User" "Warning" "Failed to get user via WMI/Invoke-Command: $($_.Exception.Message)"
             # Fallback: Prompt the user
             $remoteUsername = Read-Host "Could not auto-detect remote user. Please enter the Windows username logged into '$targetDevice'"
             if ([string]::IsNullOrWhiteSpace($remoteUsername)) {
@@ -1124,7 +1140,6 @@ function Execute-ExpressModeLogic {
             Write-Warning "No files or folders found to transfer based on defined paths for user '$remoteUsername' on '$targetDevice'."
             LogTransfer "Gather Paths" "Warning" "No template paths resolved successfully for $remoteUsername."
             # Decide if this is critical - maybe continue for settings? For now, we'll continue.
-            # $transferSuccess = $false # Optionally mark as failure if no user files found
         }
 
         # Create Local Temp Directory
@@ -1138,45 +1153,50 @@ function Execute-ExpressModeLogic {
         $currentItem = 0
         $errorsDuringTransfer = $false
 
-        foreach ($item in $remotePathsToTransfer) {
-            $currentItem++
-            $progress = [int](($currentItem / $totalItems) * 50) + 10 # Progress from 10% to 60%
-            Write-Progress -Activity "Transferring Files from $targetDevice" -Status "[$progress%]: Copying $($item.Name)" -PercentComplete $progress
+        if ($totalItems -gt 0) {
+            foreach ($item in $remotePathsToTransfer) {
+                $currentItem++
+                $progress = [int](($currentItem / $totalItems) * 50) + 10 # Progress from 10% to 60%
+                Write-Progress -Activity "Transferring Files from $targetDevice" -Status "[$progress%]: Copying $($item.Name)" -PercentComplete $progress
 
-            $sourcePath = $item.Path # This is the path on the mapped drive (e.g., X:\Users\...)
-            # Destination path uses the SourceKey to maintain structure in the temp dir
-            $destRelativePath = $item.SourceKey -replace '[^a-zA-Z0-9_]', '_' # Sanitize key
-            if ($item.Type -eq 'File') {
-                 $destRelativePath = Join-Path $destRelativePath (Split-Path $sourcePath -Leaf)
-            }
-            $destinationPath = Join-Path $localTempTransferDir $destRelativePath
-
-            Write-Host "  Copying '$($item.Name)' from '$sourcePath' to '$destinationPath'"
-            LogTransfer "File Transfer" "Attempt" "Copying $($item.SourceKey) from $sourcePath"
-            try {
-                # Ensure destination directory exists
-                $destDir = Split-Path $destinationPath -Parent
-                if (-not (Test-Path $destDir)) {
-                    New-Item -Path $destDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+                $sourcePath = $item.Path # This is the path on the mapped drive (e.g., X:\Users\...)
+                # Destination path uses the SourceKey to maintain structure in the temp dir
+                $destRelativePath = $item.SourceKey -replace '[^a-zA-Z0-9_]', '_' # Sanitize key
+                if ($item.Type -eq 'File') {
+                     $destRelativePath = Join-Path $destRelativePath (Split-Path $sourcePath -Leaf)
                 }
+                $destinationPath = Join-Path $localTempTransferDir $destRelativePath
 
-                Copy-Item -Path $sourcePath -Destination $destinationPath -Recurse:($item.Type -eq 'Folder') -Force -ErrorAction Stop
-                LogTransfer "File Transfer" "Success" "Copied $($item.SourceKey) to $destinationPath"
-            } catch {
-                Write-Warning "  Failed to copy '$($item.Name)' from '$sourcePath': $($_.Exception.Message)"
-                LogTransfer "File Transfer" "Error" "Failed to copy $($item.SourceKey): $($_.Exception.Message)"
-                $errorsDuringTransfer = $true
-                # Continue with next item
+                Write-Host "  Copying '$($item.Name)' from '$sourcePath' to '$destinationPath'"
+                LogTransfer "File Transfer" "Attempt" "Copying $($item.SourceKey) from $sourcePath"
+                try {
+                    # Ensure destination directory exists
+                    $destDir = Split-Path $destinationPath -Parent
+                    if (-not (Test-Path $destDir)) {
+                        New-Item -Path $destDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+                    }
+
+                    Copy-Item -Path $sourcePath -Destination $destinationPath -Recurse:($item.Type -eq 'Folder') -Force -ErrorAction Stop
+                    LogTransfer "File Transfer" "Success" "Copied $($item.SourceKey) to $destinationPath"
+                } catch {
+                    Write-Warning "  Failed to copy '$($item.Name)' from '$sourcePath': $($_.Exception.Message)"
+                    LogTransfer "File Transfer" "Error" "Failed to copy $($item.SourceKey): $($_.Exception.Message)"
+                    $errorsDuringTransfer = $true
+                    # Continue with next item
+                }
             }
-        }
-        Write-Progress -Activity "Transferring Files from $targetDevice" -Completed
+            Write-Progress -Activity "Transferring Files from $targetDevice" -Completed
 
-        if ($errorsDuringTransfer) {
-            Write-Warning "One or more errors occurred during file/folder transfer. Check log."
-            # $transferSuccess = $false # Decide if partial success is acceptable
+            if ($errorsDuringTransfer) {
+                Write-Warning "One or more errors occurred during file/folder transfer. Check log."
+            } else {
+                Write-Host "File/folder transfer completed." -ForegroundColor Green
+            }
         } else {
-            Write-Host "File/folder transfer completed." -ForegroundColor Green
+             Write-Host "Skipping file/folder transfer as no items were resolved."
+             Write-Progress -Activity "Transferring Files from $targetDevice" -Status "[60%]: No files to transfer" -PercentComplete 60
         }
+
 
         # --- 6. Transfer Settings (Network Drives / Printers) ---
         Write-Progress -Activity "Transferring Settings" -Status "[60%]: Capturing remote network drives..." -PercentComplete 60
@@ -1192,7 +1212,8 @@ function Execute-ExpressModeLogic {
             Write-Host "Successfully retrieved and saved remote mapped drives." -ForegroundColor Green
             LogTransfer "Get Drives" "Success" "Saved remote drives to $remoteDrivesCsvPath"
         } catch {
-            Write-Warning "Failed to get mapped drives from $targetDevice: $($_.Exception.Message)"
+            # FIX: Use ${targetDevice} in the string
+            Write-Warning "Failed to get mapped drives from ${targetDevice}: $($_.Exception.Message)"
             LogTransfer "Get Drives" "Error" "Failed: $($_.Exception.Message)"
             # Continue transfer
         }
@@ -1210,7 +1231,8 @@ function Execute-ExpressModeLogic {
             Write-Host "Successfully retrieved and saved remote network printers." -ForegroundColor Green
             LogTransfer "Get Printers" "Success" "Saved remote printers to $remotePrintersTxtPath"
         } catch {
-            Write-Warning "Failed to get network printers from $targetDevice: $($_.Exception.Message)"
+            # FIX: Use ${targetDevice} in the string
+            Write-Warning "Failed to get network printers from ${targetDevice}: $($_.Exception.Message)"
             LogTransfer "Get Printers" "Error" "Failed: $($_.Exception.Message)"
             # Continue transfer
         }
@@ -1352,11 +1374,12 @@ function Execute-ExpressModeLogic {
                 Start-ConfigManagerActions
                 Write-Host "REMOTE JOB: Background updates finished."
 
-            } # End Invoke-Command ScriptBlock
+            } -ErrorAction Stop # End Invoke-Command ScriptBlock
             Write-Host "Successfully executed remote actions on $targetDevice." -ForegroundColor Green
             LogTransfer "Remote Actions" "Success" "Executed GPUpdate and ConfigMgr actions remotely."
         } catch {
-            Write-Warning "Failed to execute post-transfer actions remotely on $targetDevice: $($_.Exception.Message)"
+            # FIX: Use ${targetDevice} in the string
+            Write-Warning "Failed to execute post-transfer actions remotely on ${targetDevice}: $($_.Exception.Message)"
             LogTransfer "Remote Actions" "Error" "Failed: $($_.Exception.Message)"
             # Decide if this constitutes overall failure
             # $transferSuccess = $false
@@ -1367,7 +1390,7 @@ function Execute-ExpressModeLogic {
         Write-Progress -Activity "Creating Local Backup" -Status "[90%]: Copying transferred files to backup folder..." -PercentComplete 90
         $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
         # Use the *remote* username in the backup folder name for clarity
-        $finalBackupDir = Join-Path $localBackupBaseDir "TransferBackup_${remoteUsername}_from_${targetDevice}_$timestamp"
+        $finalBackupDir = Join-Path $localBackupBaseDir "TransferBackup_${remoteUsername}_from_($targetDevice -replace '[^a-zA-Z0-9_.-]','_')_$timestamp" # Sanitize target device name for path
 
         Write-Host "Creating local backup copy of successfully transferred items in '$finalBackupDir'..."
         LogTransfer "Local Backup" "Attempt" "Copying from $localTempTransferDir to $finalBackupDir"
@@ -1386,27 +1409,36 @@ function Execute-ExpressModeLogic {
             Write-Warning "No items were successfully transferred to '$localTempTransferDir' to create a local backup copy."
             LogTransfer "Local Backup" "Warning" "Skipped - No items in temp directory $localTempTransferDir"
             # If nothing was transferred, maybe mark as unsuccessful? Depends on requirements.
-            # $transferSuccess = $false
         }
         Write-Progress -Activity "Creating Local Backup" -Completed
 
         # --- 9. Final Log Saving ---
-        $logFilePath = Join-Path $finalBackupDir "TransferLog.csv" # Save log in final backup dir
-        if (-not (Test-Path (Split-Path $logFilePath -Parent))) {
-             # Create directory if backup failed but we still want the log
-             New-Item -Path (Split-Path $logFilePath -Parent) -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+        # Ensure final backup dir exists before trying to save log there
+        if (-not ([string]::IsNullOrEmpty($finalBackupDir)) -and -not (Test-Path $finalBackupDir)) {
+             New-Item -Path $finalBackupDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
         }
+
+        # Set log file path only if final dir seems valid
+        if (-not ([string]::IsNullOrEmpty($finalBackupDir)) -and (Test-Path $finalBackupDir)) {
+            $logFilePath = Join-Path $finalBackupDir "TransferLog.csv"
+        }
+
+        # Try saving log
         try {
-            $script:transferLog | Set-Content -Path $logFilePath -Encoding UTF8 -Force
-            Write-Host "Transfer log saved to: $logFilePath"
+            if (-not ([string]::IsNullOrEmpty($logFilePath))) {
+                $script:transferLog | Set-Content -Path $logFilePath -Encoding UTF8 -Force
+                Write-Host "Transfer log saved to: $logFilePath"
+            } else {
+                # Fallback to temp if final dir wasn't created/valid
+                $tempLogPath = Join-Path $env:TEMP "ExpressTransfer_Log_$(Get-Date -Format 'yyyyMMddHHmmss').csv"
+                $script:transferLog | Set-Content -Path $tempLogPath -Encoding UTF8 -Force
+                Write-Warning "Could not determine final backup directory. Saved log to temporary location instead: $tempLogPath"
+                LogTransfer "Save Log" "Warning" "Saved log to temp: $tempLogPath"
+            }
         } catch {
-            Write-Warning "Failed to save transfer log to '$logFilePath': $($_.Exception.Message)"
-            # Try saving to temp as a last resort
-            $tempLogPath = Join-Path $env:TEMP "ExpressTransfer_Log_$(Get-Date -Format 'yyyyMMddHHmmss').csv"
-            try {
-                 $script:transferLog | Set-Content -Path $tempLogPath -Encoding UTF8 -Force
-                 Write-Warning "Saved log to temporary location instead: $tempLogPath"
-            } catch { Write-Error "CRITICAL: Failed to save log to primary or temporary location." }
+            Write-Error "CRITICAL: Failed to save log. Error: $($_.Exception.Message)"
+            LogTransfer "Save Log" "Fatal Error" "Failed to save log: $($_.Exception.Message)"
+            # Log might be lost here
         }
 
 
@@ -1440,15 +1472,24 @@ function Execute-ExpressModeLogic {
             LogTransfer "Cleanup" "Info" "Removed temp directory $localTempTransferDir"
         }
 
+        # Determine final log path for message (PowerShell v3 compatible)
+        $finalLogPathMessage = "Log saving failed"
+        if (-not ([string]::IsNullOrEmpty($logFilePath)) -and (Test-Path $logFilePath)) {
+            $finalLogPathMessage = $logFilePath
+        } elseif (-not ([string]::IsNullOrEmpty($tempLogPath)) -and (Test-Path $tempLogPath)) {
+            $finalLogPathMessage = $tempLogPath
+        }
+
+
         # Final status message
         if ($transferSuccess) {
             Write-Host "Express Transfer process completed." -ForegroundColor Green
-            [System.Windows.MessageBox]::Show("Express Transfer completed. Check console output and log for details.", "Express Transfer Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+            [System.Windows.MessageBox]::Show("Express Transfer completed. Check console output and log for details: `n$finalLogPathMessage", "Express Transfer Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
         } else {
-            Write-Error "Express Transfer failed or encountered significant errors. Check console output and log: $($logFilePath ?? $tempLogPath ?? 'Log saving failed')"
-             [System.Windows.MessageBox]::Show("Express Transfer failed or encountered significant errors. Check console output and log file for details.", "Express Transfer Failed", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            Write-Error "Express Transfer failed or encountered significant errors. Check console output and log: $finalLogPathMessage"
+             [System.Windows.MessageBox]::Show("Express Transfer failed or encountered significant errors. Check console output and log file for details: `n$finalLogPathMessage", "Express Transfer Failed", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
              # Throw an error to potentially stop script execution if called from main flow
-             throw "Express Transfer failed or encountered significant errors. Check console output and log: $($logFilePath ?? $tempLogPath ?? 'Log saving failed')"
+             throw "Express Transfer failed or encountered significant errors. Check console output and log: $finalLogPathMessage"
         }
     }
 }
@@ -1459,6 +1500,7 @@ function Execute-ExpressModeLogic {
 Write-Host "--- Script Starting ---"
 Clear-Variable -Name updateJob -Scope Script -ErrorAction SilentlyContinue # Clear previous job variable if it exists
 $script:transferLog = $null # Initialize transfer log variable
+$operationMode = 'Cancel' # Default to cancel unless changed
 
 try {
     # Determine mode ('Backup', 'Restore', 'Express', or 'Cancel')
@@ -1482,14 +1524,25 @@ try {
             if (-not $isAdmin) {
                 Write-Warning "Express mode requires administrative privileges to map drives and run remote commands."
                 Write-Host "Attempting to relaunch script with elevation..."
-                Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+                try {
+                    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs -ErrorAction Stop
+                } catch {
+                    Write-Error "Failed to relaunch with elevation: $($_.Exception.Message). Please run the script as Administrator manually."
+                    [System.Windows.MessageBox]::Show("Failed to relaunch with elevation. Please run the script as Administrator manually.", "Elevation Required", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                }
                 Exit # Exit the current non-elevated instance
             } else {
                 Write-Host "Already running as Administrator. Proceeding with Express mode."
-                # Get credentials for the remote connection (could be the current elevated user or prompt)
-                # Using Get-Credential ensures we have a PSCredential object
-                $credential = Get-Credential -UserName "$env:USERDOMAIN\$env:USERNAME" -Message "Enter credentials with ADMIN rights on the REMOTE machine for Express Mode"
-                if ($credential -eq $null) { throw "Credentials are required for Express mode." }
+                # Get credentials for the remote connection
+                $credential = $null
+                try {
+                     $credential = Get-Credential -UserName "$env:USERDOMAIN\$env:USERNAME" -Message "Enter credentials with ADMIN rights on the REMOTE machine for Express Mode"
+                } catch {
+                    # Catch potential errors if Get-Credential fails (e.g., in non-interactive session)
+                     throw "Failed to get credentials. Error: $($_.Exception.Message)"
+                }
+
+                if ($credential -eq $null) { throw "Credentials are required for Express mode and were not provided." }
 
                 # Call the Express Mode function
                 Execute-ExpressModeLogic -Credential $credential
@@ -1508,12 +1561,19 @@ try {
 } catch {
     # Catch errors during initial mode selection, window loading, or Express mode execution
     $errorMessage = "An unexpected error occurred: $($_.Exception.Message)"
-    Write-Error $errorMessage -ErrorAction Continue # Continue to finally block if possible
-    Write-Host "FATAL ERROR: $errorMessage" -ForegroundColor Red
-    try {
-        [System.Windows.MessageBox]::Show($errorMessage, "Fatal Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-    } catch {
-        Write-Warning "Could not display startup error message box."
+    # Check if it's the specific error thrown by Express Mode failure
+    if ($_.FullyQualifiedErrorId -match 'Express Transfer failed') {
+        # Error already displayed by Execute-ExpressModeLogic, just log here
+        Write-Host "Express mode failed. See previous messages." -ForegroundColor Red
+    } else {
+        # Display general errors
+        Write-Error $errorMessage -ErrorAction Continue # Continue to finally block if possible
+        Write-Host "FATAL ERROR: $errorMessage" -ForegroundColor Red
+        try {
+            [System.Windows.MessageBox]::Show($errorMessage, "Fatal Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+        } catch {
+            Write-Warning "Could not display startup error message box."
+        }
     }
 } finally {
     # Check for and receive output from the background job (ONLY for Restore mode)
