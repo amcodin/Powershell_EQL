@@ -1,3 +1,4 @@
+# Working test on prod, freespace doesnt work, consider removing or fix. test local gui backup methods, i think drives.csv isnt being remaped
 #requires -Version 3.0
 
 # --- Load Assemblies FIRST ---
